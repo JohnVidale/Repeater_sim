@@ -5,6 +5,7 @@ import csv
 import datetime as dt
 import json
 import math
+import time
 from pathlib import Path
 from typing import Any
 
@@ -22,8 +23,28 @@ import compare_repeater_pwaves as base
 
 
 PHASES = ("P", "PcP", "ScP", "PKiKP", "PKP")
-MARKED_PHASES = ("P", "pP", "sP", "PP", "PcP", "ScP", "PKP", "PKiKP", "PKIKP")
+MARKED_PHASES = (
+    "P",
+    "pP",
+    "sP",
+    "PP",
+    "PcP",
+    "ScP",
+    "sPcP",
+    "pPcP",
+    "pScP",
+    "PKP",
+    "sPKP",
+    "pPKP",
+    "PKiKP",
+    "sPKiKP",
+    "pPKiKP",
+    "PKIKP",
+    "sPKIKP",
+    "pPKIKP",
+)
 PHASE_MARKERS = {"P": "o", "PcP": "s", "ScP": "^", "PKiKP": "D", "PKP": "P"}
+PROGRESS_STATION_INTERVAL = 10
 
 
 def phase_is_usable_for_shift(phase: str, distance_degrees: float) -> bool:
@@ -57,6 +78,63 @@ def read_workbook_time_shifts(workbook_path: Path) -> dict[str, float]:
         return shifts
     finally:
         workbook.close()
+
+
+def finite_float(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return parsed
+
+
+def read_workbook_new_pair_locations(workbook_path: Path) -> dict[str, tuple[float, float]]:
+    workbook = openpyxl.load_workbook(workbook_path, read_only=True, data_only=True)
+    try:
+        sheet = workbook["pairs"]
+        rows = sheet.iter_rows(values_only=True)
+        headers = {
+            str(value).strip().lower(): index
+            for index, value in enumerate(next(rows))
+            if value is not None and str(value).strip()
+        }
+        if not {"label", "new_lat", "new_lon"}.issubset(headers):
+            return {}
+        locations: dict[str, tuple[float, float]] = {}
+        for row in rows:
+            label = row[headers["label"]] if headers["label"] < len(row) else None
+            if label is None:
+                continue
+            latitude = finite_float(row[headers["new_lat"]])
+            longitude = finite_float(row[headers["new_lon"]])
+            if latitude is None or longitude is None:
+                continue
+            locations[str(label).strip()] = (latitude, longitude)
+        return locations
+    finally:
+        workbook.close()
+
+
+def apply_pair_location_override(
+    pair: base.Pair, latitude: float, longitude: float
+) -> base.Pair:
+    event1 = base.Event(
+        pair.event1.event_id,
+        pair.event1.origin,
+        latitude,
+        longitude,
+        pair.depth_km,
+    )
+    event2 = base.Event(
+        pair.event2.event_id,
+        pair.event2.origin,
+        latitude,
+        longitude,
+        pair.depth_km,
+    )
+    return base.Pair(pair.label, event1, event2, latitude, longitude, pair.depth_km)
 
 
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -108,16 +186,33 @@ def extract_normalized_plot(
     arrival2: float,
     lag_seconds: float,
     window: list[float],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    normalization_window: list[float],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float]:
     relative = base.window_times(window, trace1.sampling_hz)
-    first = base.extract_relative(trace1, arrival1, relative)
-    second = base.extract_relative(trace2, arrival2, relative + lag_seconds)
-    first = first - np.mean(first)
-    second = second - np.mean(second)
-    scale = max(float(np.sqrt(np.mean(first * first))), float(np.sqrt(np.mean(second * second))))
-    if scale <= 0.0 or not math.isfinite(scale):
-        scale = 1.0
-    return relative, first / scale, second / scale
+    first_plot = base.extract_relative(trace1, arrival1, relative)
+    second_plot = base.extract_relative(trace2, arrival2, relative + lag_seconds)
+    normalization_relative = base.window_times(
+        normalization_window, trace1.sampling_hz
+    )
+    first_normalization = base.extract_relative(
+        trace1, arrival1, normalization_relative
+    )
+    second_normalization = base.extract_relative(
+        trace2, arrival2, normalization_relative + lag_seconds
+    )
+    mean1 = float(np.mean(first_normalization))
+    mean2 = float(np.mean(second_normalization))
+    first_plot = first_plot - mean1
+    second_plot = second_plot - mean2
+    first_normalization = first_normalization - mean1
+    second_normalization = second_normalization - mean2
+    scale1 = float(np.sqrt(np.mean(np.square(first_normalization))))
+    scale2 = float(np.sqrt(np.mean(np.square(second_normalization))))
+    if scale1 <= 0.0 or not math.isfinite(scale1):
+        scale1 = 1.0
+    if scale2 <= 0.0 or not math.isfinite(scale2):
+        scale2 = 1.0
+    return relative, first_plot / scale1, second_plot / scale2, scale1, scale2
 
 
 def display_shift(row: dict[str, Any]) -> float:
@@ -338,9 +433,13 @@ def plot_shift_summary(
 
 
 def run(
+    config_path: Path = Path("analysis_config.json"),
+    time_shift_source_override: str | None = None,
 ) -> Path:
-    config = base.load_json(Path("analysis_config.json"))
-    time_shift_source = str(config.get("time_shift_source", "computed"))
+    config = base.load_json(config_path)
+    time_shift_source = str(
+        time_shift_source_override or config.get("time_shift_source", "computed")
+    )
     if time_shift_source not in {"computed", "workbook"}:
         raise base.AnalysisError(
             "time_shift_source must be either 'computed' or 'workbook'"
@@ -359,12 +458,20 @@ def run(
 
     model = TauPyModel(model=str(config["taup_model"]))
     pair_labels = [str(label) for label in config["pairs"]]
+    catalog_workbook = time_shift_workbook or Path(config["catalog_path"])
     pairs = base.resolve_catalog(
-        Path(config["catalog_path"]),
+        catalog_workbook,
         pair_labels,
         float(config["coordinate_tolerance_degrees"]),
         float(config["coordinate_tolerance_depth_km"]),
     )
+    new_pair_locations = read_workbook_new_pair_locations(catalog_workbook)
+    pairs = {
+        label: apply_pair_location_override(pair, *new_pair_locations[label])
+        if label in new_pair_locations
+        else pair
+        for label, pair in pairs.items()
+    }
     waveform_root = Path(config["waveform_root"])
     workbook_time_shifts: dict[str, float] = {}
     if time_shift_source == "workbook":
@@ -389,15 +496,43 @@ def run(
     median_summary_rows: list[dict[str, Any]] = []
     residual_geometry_rows: list[dict[str, Any]] = []
 
-    for pair_label in pair_labels:
+    total_pairs = len(pair_labels)
+    print(
+        f"Multiphase run: {total_pairs} pairs, {len(PHASES)} measured phases, "
+        f"time_shift_source={time_shift_source}",
+        flush=True,
+    )
+
+    for pair_number, pair_label in enumerate(pair_labels, start=1):
+        pair_start = time.perf_counter()
         pair = pairs[pair_label]
-        print(f"PAIR {pair_label}", flush=True)
         index1 = base.index_bhz_traces(base.event_directory(waveform_root, pair.event1))
         index2 = base.index_bhz_traces(base.event_directory(waveform_root, pair.event2))
-        station_ids = sorted(set(index1).intersection(index2))
+        excluded = base.excluded_station_codes(config)
+        station_ids = [
+            station_id
+            for station_id in sorted(set(index1).intersection(index2))
+            if not base.station_is_excluded(station_id, excluded)
+        ]
         pair_plot_rows: list[dict[str, Any]] = []
+        pair_exception_start = len(exception_rows)
+        print(
+            f"Pair {pair_number}/{total_pairs} {pair_label}: "
+            f"{len(station_ids)} common stations; measuring phases...",
+            flush=True,
+        )
 
-        for station_id in station_ids:
+        for station_number, station_id in enumerate(station_ids, start=1):
+            if (
+                station_number == 1
+                or station_number == len(station_ids)
+                or station_number % PROGRESS_STATION_INTERVAL == 0
+            ):
+                print(
+                    f"  {pair_label}: station {station_number}/{len(station_ids)} "
+                    f"{station_id}",
+                    flush=True,
+                )
             try:
                 path1, path2 = base.choose_trace_pair(
                     index1[station_id],
@@ -458,13 +593,14 @@ def run(
                         phase_windows[phase],
                         lag_search_seconds,
                     )
-                    plot_time, plot1, plot2 = extract_normalized_plot(
+                    plot_time, plot1, plot2, plot_scale1, plot_scale2 = extract_normalized_plot(
                         trace1,
                         trace2,
                         arrival1,
                         arrival2 + applied_time_shift,
                         lag,
                         plot_windows[phase],
+                        phase_windows[phase],
                     )
                     total_shift = applied_time_shift + float(lag)
                     marked_phase_times: dict[str, float] = {}
@@ -510,6 +646,8 @@ def run(
                         "good": good,
                         "trace1_path": str(path1),
                         "trace2_path": str(path2),
+                        "plot_scale1_correlation_window_rms": plot_scale1,
+                        "plot_scale2_correlation_window_rms": plot_scale2,
                     }
                     measurement_rows.append(row)
                     pair_plot_row = dict(row)
@@ -534,6 +672,9 @@ def run(
                     )
 
         good_rows = [row for row in pair_plot_rows if row["good"]]
+        measured_count = len(pair_plot_rows)
+        good_count = len(good_rows)
+        exception_count = len(exception_rows) - pair_exception_start
         computed_median_shift = (
             float(np.median([row["total_shift_seconds"] for row in good_rows]))
             if good_rows
@@ -619,7 +760,16 @@ def run(
             median_shift,
             threshold,
         )
+        elapsed = time.perf_counter() - pair_start
+        print(
+            f"Pair {pair_number}/{total_pairs} {pair_label}: "
+            f"done in {elapsed:.1f}s; measured={measured_count}, "
+            f"good={good_count}, exceptions={exception_count}, "
+            f"median_shift={median_shift:+.4f}s",
+            flush=True,
+        )
 
+    print("Writing CSV summaries and all-pairs residual plot...", flush=True)
     plot_all_pairs_residuals(output, pair_labels, residual_geometry_rows, median_summary_rows, threshold)
 
     write_csv(output / "phase_measurements.csv", measurement_rows)
@@ -631,12 +781,19 @@ def run(
         json.dumps(
             {
                 "created": dt.datetime.now().isoformat(),
-                "config_path": str(Path("analysis_config.json").resolve()),
+                "config_path": str(config_path.resolve()),
                 "correlation_threshold": threshold,
                 "time_shift_source": time_shift_source,
                 "time_shift_workbook": str(time_shift_workbook) if time_shift_workbook else "",
+                "catalog_workbook": str(catalog_workbook),
+                "pair_location_source": "new_lat_new_lon_when_available",
                 "preapplied_time_shifts": preapply_time_shifts,
                 "lag_search_seconds": lag_search_seconds,
+                "phase_plot_normalization": (
+                    "each trace demeaned by its own phase correlation/search "
+                    "window mean, then divided by its own demeaned RMS amplitude "
+                    "within that same window"
+                ),
                 "phase_selection_rules": {
                     "PcP": "epicentral_distance_degrees < 40",
                     "ScP": "epicentral_distance_degrees < 40",
@@ -645,6 +802,8 @@ def run(
                 },
                 "pairs": pair_labels,
                 "phases": PHASES,
+                "marked_phases": MARKED_PHASES,
+                "excluded_stations": sorted(base.excluded_station_codes(config)),
                 "summary_method": "pair median common shift; no L1 location fit",
             },
             indent=2,
@@ -738,8 +897,15 @@ def plot_all_pairs_residuals(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=Path, default=Path("analysis_config.json"))
+    parser.add_argument(
+        "--time-shift-source",
+        choices=("computed", "workbook"),
+        default=None,
+        help="Override analysis_config.json time_shift_source for this run.",
+    )
     args = parser.parse_args()
-    output = run()
+    output = run(args.config, args.time_shift_source)
     print(f"OUTPUT {output.resolve()}")
     print(f"phase plots {len(list((output / 'phase_plots').glob('*.png')))}")
     print(f"residual plots {len(list((output / 'median_residual_geometry_plots').glob('*.png')))}")

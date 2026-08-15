@@ -173,6 +173,19 @@ def station_evaluation_mode(config: dict[str, Any]) -> str:
     return mode
 
 
+def excluded_station_codes(config: dict[str, Any]) -> set[str]:
+    """Return station codes excluded regardless of network prefix."""
+    return {
+        str(value).strip().upper().split(".")[-1]
+        for value in config.get("excluded_stations", [])
+        if str(value).strip()
+    }
+
+
+def station_is_excluded(station_id: str, excluded: set[str]) -> bool:
+    return str(station_id).strip().upper().split(".")[-1] in excluded
+
+
 def normalized_header_map(row: Sequence[Any]) -> dict[str, int]:
     return {
         str(value).strip().lower(): index
@@ -436,10 +449,13 @@ def all_station_candidates(
     pair: Pair,
     index1: dict[str, list[dict[str, Any]]],
     index2: dict[str, list[dict[str, Any]]],
+    excluded: set[str] | None = None,
 ) -> list[Selection]:
     """Build deterministic candidates from the exact network.station intersection."""
     candidates: list[Selection] = []
     for station_id in sorted(set(index1).intersection(index2)):
+        if excluded and station_is_excluded(station_id, excluded):
+            continue
         network, station = station_id.split(".", 1)
         candidates.append(
             Selection(
@@ -1348,6 +1364,7 @@ def run_analysis(config_path: Path, selection_path: Path) -> AnalysisRun:
     config = load_json(config_path)
     validate_config_paths(config)
     evaluation_mode = station_evaluation_mode(config)
+    excluded = excluded_station_codes(config)
     correlation_threshold = float(config["selection_correlation_threshold"])
     pair_labels = [str(label) for label in config["pairs"]]
     pairs = resolve_catalog(
@@ -1356,7 +1373,11 @@ def run_analysis(config_path: Path, selection_path: Path) -> AnalysisRun:
         float(config["coordinate_tolerance_degrees"]),
         float(config["coordinate_tolerance_depth_km"]),
     )
-    selections = load_selections(selection_path)
+    selections = [
+        selection
+        for selection in load_selections(selection_path)
+        if not station_is_excluded(selection.station_id, excluded)
+    ]
     validate_selections(selections, pairs, correlation_threshold)
     if evaluation_mode == STATION_MODE_SELECTED:
         validate_selection_figures(selections, Path(config["figure_root"]))
@@ -1427,7 +1448,7 @@ def run_analysis(config_path: Path, selection_path: Path) -> AnalysisRun:
             candidate_counts[pair_label] = 0
             continue
         if evaluation_mode == STATION_MODE_ALL:
-            pair_candidates = all_station_candidates(pair, index1, index2)
+            pair_candidates = all_station_candidates(pair, index1, index2, excluded)
         else:
             pair_candidates = [
                 selection
@@ -1702,6 +1723,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         config = load_json(arguments.config)
         validate_config_paths(config)
         evaluation_mode = station_evaluation_mode(config)
+        excluded = excluded_station_codes(config)
         if arguments.validate_only:
             pairs = resolve_catalog(
                 Path(config["catalog_path"]),
@@ -1709,7 +1731,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 float(config["coordinate_tolerance_degrees"]),
                 float(config["coordinate_tolerance_depth_km"]),
             )
-            selections = load_selections(arguments.selection)
+            selections = [
+                selection
+                for selection in load_selections(arguments.selection)
+                if not station_is_excluded(selection.station_id, excluded)
+            ]
             validate_selections(
                 selections, pairs, float(config["selection_correlation_threshold"])
             )
