@@ -146,12 +146,11 @@ class MatchingAndArrivalTests(unittest.TestCase):
         arrivals, distance = crp.requested_phase_arrivals(
             model, event, 0.0, 30.0
         )
-        self.assertEqual(set(arrivals), {"P", "pP", "sP", "PP", "PcP"})
+        self.assertEqual(set(arrivals), {"P", "pP", "sP", "PP"})
         self.assertAlmostEqual(distance, 30.0, places=5)
         self.assertLess(arrivals["P"], arrivals["pP"])
         self.assertLess(arrivals["pP"], arrivals["sP"])
         self.assertLess(arrivals["sP"], arrivals["PP"])
-        self.assertLess(arrivals["PP"], arrivals["PcP"])
 
     def test_phase_plot_times_apply_event2_alignment_lag(self):
         plotted = crp.aligned_phase_plot_times(
@@ -462,8 +461,8 @@ class OutputTests(unittest.TestCase):
         )
         axis = Axis()
         crp.mark_phase_arrivals_on_overlay(axis, station)
-        self.assertEqual(axis.labels, ["P", "PcP"])
-        self.assertEqual(axis.lines, [0.0, 25.0])
+        self.assertEqual(axis.labels, ["P"])
+        self.assertEqual(axis.lines, [0.0])
 
     def test_plot_time_axis_limits_restore_configured_half_open_end(self):
         relative = crp.window_times([-10.0, 80.0], 100.0)

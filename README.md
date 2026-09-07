@@ -1,5 +1,22 @@
 # Repeater P-wave noise comparison
 
+## Active multiphase phase selection (2026-09-05)
+
+The multiphase workflow excludes PcP and ScP from measurements, common-time
+estimation, and relative-location fits. The preferred fit uses P and PKP;
+the sensitivity fit adds PKiKP. Bootstrap phase selection follows these same
+fit phase sets. PKIKP remains a plot annotation only. Existing output folders
+retain their historical phase selections and have not been regenerated.
+
+Each active multiphase correlation window is centered on an accepted automatic
+AIC pick for that phase and event. TauP ak135 supplies only the prediction
+around which the picker searches. The reported total event-2-minus-event-1
+shift is the difference between the two picked-arrival offsets plus the
+correlation residual lag. The saved phase-measurement table retains the two
+pick offsets, SNRs, acceptance states, and rejection reasons.
+
+The P-wave-only workflow documented below is a separate analysis.
+
 This program implements the workflow in `PLAN.md` for the eight currently
 supported repeating-earthquake pairs. It tests whether the residual between
 two aligned, vertical teleseismic P-wave traces is compatible with the pre-P
@@ -104,7 +121,7 @@ files, a SAC `t0` labeled P is a travel time from the catalog origin even though
 the record starts about 100 seconds before origin; it is retained only as a
 quality-control comparison. Calculated P is always the analysis reference.
 
-For plotting only, TauP also requests `pP`, `sP`, `PP`, and `PcP`. When present
+For plotting only, TauP also requests `pP`, `sP`, and `PP`. When present
 in the display window, the earliest arrival of each exact phase name is marked
 and labeled for event 1 only. These additional phase predictions do not change
 alignment, correlation, or assessment.

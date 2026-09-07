@@ -33,7 +33,7 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 def local_fit_median_absolute(
     gradients: np.ndarray, residuals: np.ndarray, start: np.ndarray
 ) -> np.ndarray:
-    bounds = [(-5.0, 5.0), (-5.0, 5.0), (-5.0, 5.0)]
+    bounds = [(-5.0, 5.0)] * int(len(start))
 
     def objective(offset_km: np.ndarray) -> float:
         fit_residuals = residuals - gradients @ np.asarray(offset_km, dtype=float)
@@ -60,7 +60,7 @@ def bootstrap_uncertainty(
     rng: np.random.Generator,
 ) -> dict[str, float]:
     n = len(residuals)
-    offsets_boot = np.empty((iterations, 3), dtype=float)
+    offsets_boot = np.empty((iterations, len(best_offset)), dtype=float)
     origin_shifts = np.empty(iterations, dtype=float)
     for index in range(iterations):
         sample = rng.integers(0, n, size=n)
@@ -79,7 +79,9 @@ def bootstrap_uncertainty(
     return {
         "east_sigma_km": float(np.std(offsets_boot[:, 0], ddof=1)),
         "north_sigma_km": float(np.std(offsets_boot[:, 1], ddof=1)),
-        "depth_sigma_km": float(np.std(offsets_boot[:, 2], ddof=1)),
+        "depth_sigma_km": float(np.std(offsets_boot[:, 2], ddof=1))
+        if offsets_boot.shape[1] > 2
+        else 0.0,
         "horizontal_p16_km": float(horizontal_lower),
         "horizontal_p50_km": float(horizontal_median),
         "horizontal_p84_km": float(horizontal_upper),
@@ -118,6 +120,9 @@ def run(
         )
     allowed_phases = offsets.PHASE_SETS[phase_set]
     config = base.load_json(config_path)
+    depth_mode = offsets.relative_location_depth_mode(config)
+    centroid_mode = offsets.centroid_location_mode(config)
+    solve_depth = depth_mode == "free"
     model = TauPyModel(model=str(config["taup_model"]))
     pair_labels = [str(label) for label in config["pairs"]]
     catalog_path = Path(config.get("time_shift_workbook") or config["catalog_path"])
@@ -127,7 +132,11 @@ def run(
         float(config["coordinate_tolerance_degrees"]),
         float(config["coordinate_tolerance_depth_km"]),
     )
-    location_overrides = offsets.load_new_pair_locations(catalog_path)
+    location_overrides = (
+        offsets.load_new_pair_locations(catalog_path)
+        if centroid_mode != "catalog_fixed"
+        else {}
+    )
     pairs = {
         label: offsets.apply_pair_location_override(pair, *location_overrides[label])
         if label in location_overrides
@@ -149,7 +158,7 @@ def run(
             [
                 float(row["east_km"]),
                 float(row["north_km"]),
-                float(row["depth_diff_km"]),
+                *([float(row["depth_diff_km"])] if solve_depth else []),
             ],
             dtype=float,
         )
@@ -174,7 +183,7 @@ def run(
             gradient = offsets.travel_time_gradient(model, pair.event2, row, step_km)
             if gradient is None:
                 continue
-            gradients.append(gradient)
+            gradients.append(gradient if solve_depth else gradient[:2])
             total_shift = float(row["total_shift_seconds"])
             residuals.append(total_shift - median_shifts[pair_label])
             total_shifts.append(total_shift)
@@ -189,10 +198,12 @@ def run(
                     "event2": pair.event2.event_id,
                     "n": len(residuals),
                     "status": f"insufficient_{phase_set}_measurements",
-                    "location_reference": "new_lat_new_lon"
+                    "location_reference": "relocated_centroid"
                     if pair_label in location_overrides
-                    else "catalog_path",
+                    else "catalog_ehb",
+                    "centroid_location_mode": centroid_mode,
                     "phase_set": phase_set,
+                    "relative_location_depth_mode": depth_mode,
                     "bootstrap_iterations": iterations,
                 }
             )
@@ -218,7 +229,7 @@ def run(
                 "n": len(residuals),
                 "east_km": float(best_offset[0]),
                 "north_km": float(best_offset[1]),
-                "depth_diff_km": float(best_offset[2]),
+                "depth_diff_km": float(best_offset[2]) if solve_depth else 0.0,
                 "event2_minus_event1_origin_time_shift_s": origin_shift,
                 "horizontal_km": horizontal,
                 "separation_3d_km": separation,
@@ -226,10 +237,12 @@ def run(
                 "median_abs_fit_residual_s": float(np.median(np.abs(fit_residuals))),
                 "residual_rms_s": float(np.sqrt(np.mean(fit_residuals * fit_residuals))),
                 "bootstrap_iterations": iterations,
-                "location_reference": "new_lat_new_lon"
+                "location_reference": "relocated_centroid"
                 if pair_label in location_overrides
-                else "catalog_path",
+                else "catalog_ehb",
+                "centroid_location_mode": centroid_mode,
                 "phase_set": phase_set,
+                "relative_location_depth_mode": depth_mode,
             }
         )
 

@@ -45,7 +45,7 @@ ASSESS_INDETERMINATE = "indeterminate"
 MISSING_SAC = -12345.0
 STATION_MODE_SELECTED = "selected"
 STATION_MODE_ALL = "all"
-PLOTTED_PHASES = ("P", "pP", "sP", "PP", "PcP")
+PLOTTED_PHASES = ("P", "pP", "sP", "PP")
 
 
 class AnalysisError(RuntimeError):
@@ -1121,6 +1121,8 @@ def mark_phase_arrivals_on_overlay(
     x_min = float(station.relative_plot_time[0])
     x_max = float(station.relative_plot_time[-1])
     for phase, event_times in station.phase_plot_times.items():
+        if phase not in PLOTTED_PHASES:
+            continue
         arrival_time = event_times[0]
         if arrival_time is None or not x_min <= arrival_time <= x_max:
             continue

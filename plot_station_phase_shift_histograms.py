@@ -12,15 +12,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-PHASES = ("P", "PcP", "ScP", "PKP", "PKiKP")
+PHASES = ("P", "PKP", "PKiKP")
 PHASE_COLORS = {
     "P": "tab:blue",
-    "PcP": "tab:orange",
-    "ScP": "tab:green",
     "PKP": "tab:purple",
     "PKiKP": "tab:red",
 }
-HIGHLIGHT_STATIONS = {"WMQ", "AAK", "LSZ", "OTAV", "SNZO", "TEIG", "TRQA", "LOHW", "RWWY"}
+HIGHLIGHT_STATIONS = {"LPAZ", "VNDA", "CHTO", "KEV", "OTAV", "PMSA", "QSPA", "TRQA", "SJG"}
 
 
 def main() -> Path:
@@ -41,6 +39,22 @@ def main() -> Path:
     args = parser.parse_args()
     output = args.output or args.phase_measurements.parent / "station_phase_shift_histograms.png"
 
+    # In computed-shift runs, residual_lag_seconds is the full event-to-event
+    # shift because no workbook shift was pre-applied.  The desired histogram
+    # quantity is the station/phase differential relative to that pair's
+    # median shift, so load the pair medians and subtract them from total_shift.
+    median_path = args.phase_measurements.parent / "median_summary.csv"
+    pair_medians: dict[str, float] = {}
+    if median_path.is_file():
+        with median_path.open(newline="") as median_handle:
+            for median_row in csv.DictReader(median_handle):
+                try:
+                    pair_medians[str(median_row["pair_label"])] = float(
+                        median_row["pair_median_shift_seconds"]
+                    )
+                except (KeyError, TypeError, ValueError):
+                    continue
+
     by_station: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     with args.phase_measurements.open(newline="") as handle:
         for row in csv.DictReader(handle):
@@ -50,7 +64,12 @@ def main() -> Path:
             if phase not in PHASES:
                 continue
             try:
-                shift = float(row["residual_lag_seconds"])
+                if pair_medians and row.get("pair_label") in pair_medians:
+                    shift = float(row["total_shift_seconds"]) - pair_medians[row["pair_label"]]
+                else:
+                    # Backward-compatible fallback for older workbook-mode
+                    # files, where residual_lag_seconds was already centered.
+                    shift = float(row["residual_lag_seconds"])
             except (KeyError, TypeError, ValueError):
                 continue
             if np.isfinite(shift):
@@ -124,7 +143,7 @@ def main() -> Path:
     )
     figure.suptitle(
         "Accepted same-phase differential shifts by station\n"
-        "histograms show residual shift after the pair-wide time shift; "
+        "histograms show station/phase residual shift after subtracting the pair median; "
         "yellow/red panels mark the nine stations of interest",
         fontsize=14,
         y=1.04,

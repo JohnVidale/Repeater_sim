@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Estimate fixed-depth common lat/lon for repeater pairs from direct-P picks.
+"""Estimate common repeater-pair centroids from direct-P picks.
 
 The fitter is intended for the South Sandwich repeater-pair workbook.  For each
 configured pair it:
 
-* keeps the workbook pair depth fixed,
+* optionally keeps the workbook pair depth fixed,
 * makes automatic direct-P AIC picks for both events,
 * solves a common pair latitude/longitude plus separate origin-time offsets for
   the two events, and
@@ -50,6 +50,17 @@ FINITE_DIFFERENCE_KM = 1.0
 MAX_LINEAR_STEP_KM = 25.0
 MAX_ITERATIONS = 3
 EARTH_KM_PER_DEGREE = 111.195
+
+
+def centroid_location_mode(config: dict[str, Any]) -> str:
+    """Return the requested treatment of the common pair centroid."""
+    mode = str(config.get("centroid_location_mode", "fixed_depth")).strip().lower()
+    if mode not in {"free_hypocenter", "fixed_depth", "catalog_fixed"}:
+        raise ValueError(
+            "centroid_location_mode must be 'free_hypocenter', 'fixed_depth', "
+            "or 'catalog_fixed'"
+        )
+    return mode
 
 
 @dataclass
@@ -340,7 +351,7 @@ def travel_time_gradient(
     latitude: float,
     longitude: float,
     depth_km: float,
-) -> tuple[float, float, float] | None:
+) -> tuple[float, float, float, float] | None:
     center = direct_p_time(
         model,
         latitude,
@@ -372,7 +383,20 @@ def travel_time_gradient(
         values.append(float(shifted[0]))
     gradient_east = (values[1] - values[2]) / (2.0 * FINITE_DIFFERENCE_KM)
     gradient_north = (values[3] - values[4]) / (2.0 * FINITE_DIFFERENCE_KM)
-    return values[0], gradient_east, gradient_north
+    plus_depth = direct_p_time(
+        model, latitude, longitude, depth_km + FINITE_DIFFERENCE_KM,
+        pick.station_latitude, pick.station_longitude,
+    )
+    minus_depth = direct_p_time(
+        model, latitude, longitude, max(0.0, depth_km - FINITE_DIFFERENCE_KM),
+        pick.station_latitude, pick.station_longitude,
+    )
+    if plus_depth is None or minus_depth is None:
+        return None
+    gradient_depth = (float(plus_depth[0]) - float(minus_depth[0])) / (
+        (depth_km + FINITE_DIFFERENCE_KM) - max(0.0, depth_km - FINITE_DIFFERENCE_KM)
+    )
+    return values[0], gradient_east, gradient_north, gradient_depth
 
 
 def design_at_location(
@@ -381,22 +405,25 @@ def design_at_location(
     picks: list[Pick],
     latitude: float,
     longitude: float,
+    depth_km: float,
+    location_dimensions: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[Pick]]:
     rows: list[list[float]] = []
     residuals: list[float] = []
     weights: list[float] = []
     used: list[Pick] = []
     for pick in picks:
-        gradient = travel_time_gradient(
-            model, pick, latitude, longitude, pair.depth_km
-        )
+        gradient = travel_time_gradient(model, pick, latitude, longitude, depth_km)
         if gradient is None:
             continue
-        predicted, gradient_east, gradient_north = gradient
+        predicted, gradient_east, gradient_north, gradient_depth = gradient
         origin = pair.event1.origin if pick.event_id == pair.event1.event_id else pair.event2.origin
         event1_column = 1.0 if pick.event_id == pair.event1.event_id else 0.0
         event2_column = 1.0 if pick.event_id == pair.event2.event_id else 0.0
-        rows.append([gradient_east, gradient_north, event1_column, event2_column])
+        rows.append(
+            [gradient_east, gradient_north, gradient_depth][:location_dimensions]
+            + [event1_column, event2_column]
+        )
         residuals.append(float(pick.pick_epoch) - float(origin) - predicted)
         weights.append(max(0.05, float(pick.uncertainty_seconds)))
         used.append(pick)
@@ -409,9 +436,10 @@ def design_at_location(
 
 
 def median_offsets(
-    design: np.ndarray, residuals: np.ndarray, event_ids: np.ndarray, east: float, north: float
+    design: np.ndarray, residuals: np.ndarray, event_ids: np.ndarray, location_step: np.ndarray
 ) -> tuple[float, float, np.ndarray]:
-    preliminary = residuals - design[:, :2] @ np.asarray([east, north], dtype=float)
+    dimensions = len(location_step)
+    preliminary = residuals - design[:, :dimensions] @ location_step
     offset1 = float(np.median(preliminary[event_ids == 1]))
     offset2 = float(np.median(preliminary[event_ids == 2]))
     offsets = np.where(event_ids == 1, offset1, offset2)
@@ -424,19 +452,19 @@ def solve_linearized(
     weights: np.ndarray,
     used: list[Pick],
 ) -> dict[str, Any]:
+    location_dimensions = design.shape[1] - 2
     event_ids = np.asarray([1 if pick.event_id == used[0].event_id else 2 for pick in used])
 
     def soft_l1_residual(params: np.ndarray) -> np.ndarray:
         modeled = design @ params
         return (residuals - modeled) / weights
 
+    lower = [-MAX_LINEAR_STEP_KM] * location_dimensions + [-20.0, -20.0]
+    upper = [MAX_LINEAR_STEP_KM] * location_dimensions + [20.0, 20.0]
     soft = least_squares(
         soft_l1_residual,
-        np.zeros(4, dtype=float),
-        bounds=(
-            [-MAX_LINEAR_STEP_KM, -MAX_LINEAR_STEP_KM, -20.0, -20.0],
-            [MAX_LINEAR_STEP_KM, MAX_LINEAR_STEP_KM, 20.0, 20.0],
-        ),
+        np.zeros(location_dimensions + 2, dtype=float),
+        bounds=(lower, upper),
         loss="soft_l1",
         f_scale=2.0,
         max_nfev=200,
@@ -445,47 +473,50 @@ def solve_linearized(
         gtol=1e-10,
     )
 
-    def median_objective(horizontal: np.ndarray) -> float:
-        east, north = map(float, horizontal)
-        _, _, offsets = median_offsets(design, residuals, event_ids, east, north)
-        modeled = design[:, :2] @ np.asarray([east, north]) + offsets
+    def median_objective(location_step: np.ndarray) -> float:
+        _, _, offsets = median_offsets(design, residuals, event_ids, location_step)
+        modeled = design[:, :location_dimensions] @ location_step + offsets
         return float(np.median(np.abs(residuals - modeled)))
 
-    global_fit = differential_evolution(
-        median_objective,
-        bounds=[(-MAX_LINEAR_STEP_KM, MAX_LINEAR_STEP_KM)] * 2,
-        seed=20260813,
-        polish=False,
-        tol=1e-8,
-        updating="immediate",
-        workers=1,
-    )
-    local_fit = minimize(
-        median_objective,
-        global_fit.x,
-        method="Powell",
-        bounds=[(-MAX_LINEAR_STEP_KM, MAX_LINEAR_STEP_KM)] * 2,
-        options={"maxiter": 1000, "xtol": 1e-10, "ftol": 1e-12},
-    )
-    horizontal = local_fit.x if median_objective(local_fit.x) <= median_objective(global_fit.x) else global_fit.x
-    east, north = map(float, horizontal)
+    if location_dimensions:
+        global_fit = differential_evolution(
+            median_objective,
+            bounds=[(-MAX_LINEAR_STEP_KM, MAX_LINEAR_STEP_KM)] * location_dimensions,
+            seed=20260813,
+            polish=False,
+            tol=1e-8,
+            updating="immediate",
+            workers=1,
+        )
+        local_fit = minimize(
+            median_objective,
+            global_fit.x,
+            method="Powell",
+            bounds=[(-MAX_LINEAR_STEP_KM, MAX_LINEAR_STEP_KM)] * location_dimensions,
+            options={"maxiter": 1000, "xtol": 1e-10, "ftol": 1e-12},
+        )
+        location_step = (
+            local_fit.x
+            if median_objective(local_fit.x) <= median_objective(global_fit.x)
+            else global_fit.x
+        )
+    else:
+        location_step = np.empty(0, dtype=float)
     median_offset1, median_offset2, median_event_offsets = median_offsets(
-        design, residuals, event_ids, east, north
+        design, residuals, event_ids, location_step
     )
-    median_modeled = design[:, :2] @ horizontal + median_event_offsets
+    median_modeled = design[:, :location_dimensions] @ location_step + median_event_offsets
     median_residuals = residuals - median_modeled
     soft_residuals = residuals - design @ soft.x
     return {
         "soft_l1": {
-            "east_km": float(soft.x[0]),
-            "north_km": float(soft.x[1]),
-            "event1_origin_offset_s": float(soft.x[2]),
-            "event2_origin_offset_s": float(soft.x[3]),
+            "location_step_km": soft.x[:location_dimensions],
+            "event1_origin_offset_s": float(soft.x[-2]),
+            "event2_origin_offset_s": float(soft.x[-1]),
             "residuals": soft_residuals,
         },
         "median": {
-            "east_km": east,
-            "north_km": north,
+            "location_step_km": location_step,
             "event1_origin_offset_s": median_offset1,
             "event2_origin_offset_s": median_offset2,
             "residuals": median_residuals,
@@ -494,7 +525,9 @@ def solve_linearized(
     }
 
 
-def fit_pair(pair: PairInfo, picks: list[Pick], model: TauPyModel) -> dict[str, Any]:
+def fit_pair(
+    pair: PairInfo, picks: list[Pick], model: TauPyModel, mode: str
+) -> dict[str, Any]:
     accepted = [pick for pick in picks if pick.accepted]
     counts = {
         pair.event1.event_id: sum(1 for pick in accepted if pick.event_id == pair.event1.event_id),
@@ -514,13 +547,20 @@ def fit_pair(pair: PairInfo, picks: list[Pick], model: TauPyModel) -> dict[str, 
 
     latitude = pair.latitude
     longitude = pair.longitude
+    depth_km = pair.depth_km
+    location_dimensions = {
+        "catalog_fixed": 0,
+        "fixed_depth": 2,
+        "free_hypocenter": 3,
+    }[mode]
     final_used: list[Pick] = []
     final_solution: dict[str, Any] | None = None
     final_base_latitude = latitude
     final_base_longitude = longitude
+    final_base_depth = depth_km
     for _ in range(MAX_ITERATIONS):
         design, residuals, weights, used = design_at_location(
-            model, pair, accepted, latitude, longitude
+            model, pair, accepted, latitude, longitude, depth_km, location_dimensions
         )
         if len(used) < MIN_TOTAL_ACCEPTED_PICKS:
             return {
@@ -531,12 +571,16 @@ def fit_pair(pair: PairInfo, picks: list[Pick], model: TauPyModel) -> dict[str, 
         solution = solve_linearized(design, residuals, weights, used)
         final_base_latitude = latitude
         final_base_longitude = longitude
-        east = float(solution["median"]["east_km"])
-        north = float(solution["median"]["north_km"])
+        final_base_depth = depth_km
+        step = np.asarray(solution["median"]["location_step_km"], dtype=float)
+        east = float(step[0]) if location_dimensions >= 1 else 0.0
+        north = float(step[1]) if location_dimensions >= 2 else 0.0
+        depth_step = float(step[2]) if location_dimensions >= 3 else 0.0
         latitude, longitude = shifted_location(latitude, longitude, east, north)
+        depth_km = max(0.0, depth_km + depth_step)
         final_used = used
         final_solution = solution
-        if math.hypot(east, north) < 0.05:
+        if float(np.linalg.norm(step)) < 0.05:
             break
 
     assert final_solution is not None
@@ -546,11 +590,17 @@ def fit_pair(pair: PairInfo, picks: list[Pick], model: TauPyModel) -> dict[str, 
     median_north = median_horizontal * math.cos(math.radians(median_azimuth))
 
     soft = final_solution["soft_l1"]
+    soft_step = np.asarray(soft["location_step_km"], dtype=float)
     soft_lat, soft_lon = shifted_location(
         final_base_latitude,
         final_base_longitude,
-        float(soft["east_km"]),
-        float(soft["north_km"]),
+        float(soft_step[0]) if location_dimensions >= 1 else 0.0,
+        float(soft_step[1]) if location_dimensions >= 2 else 0.0,
+    )
+    soft_depth = max(
+        0.0,
+        final_base_depth
+        + (float(soft_step[2]) if location_dimensions >= 3 else 0.0),
     )
     soft_horizontal = gps2dist_azimuth(pair.latitude, pair.longitude, soft_lat, soft_lon)[0] / 1000.0
     soft_azimuth = gps2dist_azimuth(pair.latitude, pair.longitude, soft_lat, soft_lon)[1]
@@ -566,12 +616,14 @@ def fit_pair(pair: PairInfo, picks: list[Pick], model: TauPyModel) -> dict[str, 
         "soft_l1_lon": soft_lon,
         "soft_l1_east_km": soft_horizontal * math.sin(math.radians(soft_azimuth)),
         "soft_l1_north_km": soft_horizontal * math.cos(math.radians(soft_azimuth)),
+        "soft_l1_depth_km": soft_depth,
         "soft_l1_event1_origin_offset_s": float(soft["event1_origin_offset_s"]),
         "soft_l1_event2_origin_offset_s": float(soft["event2_origin_offset_s"]),
         "soft_l1_median_abs_residual_s": float(np.median(np.abs(soft_residuals))),
         "soft_l1_rms_residual_s": float(np.sqrt(np.mean(soft_residuals * soft_residuals))),
         "median_lat": latitude,
         "median_lon": longitude,
+        "median_depth_km": depth_km,
         "median_east_km": median_east,
         "median_north_km": median_north,
         "median_horizontal_km": median_horizontal,
@@ -594,6 +646,7 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def run(config_path: Path, output: Path, pair_labels: list[str] | None) -> None:
     config = read_config(config_path)
+    mode = centroid_location_mode(config)
     labels = pair_labels or [str(label) for label in config["pairs"]]
     pairs = load_pairs(config, labels)
     waveform_root = Path(config["waveform_root"])
@@ -611,7 +664,7 @@ def run(config_path: Path, output: Path, pair_labels: list[str] | None) -> None:
     for index, pair in enumerate(pairs, start=1):
         print(f"{index}/{len(pairs)} {pair.label}: picking direct P", flush=True)
         picks = collect_pair_picks(pair, waveform_root, model, excluded_stations)
-        result = fit_pair(pair, picks, model)
+        result = fit_pair(pair, picks, model, mode)
         common = {
             "pair_label": pair.label,
             "event1": pair.event1.event_id,
@@ -619,6 +672,7 @@ def run(config_path: Path, output: Path, pair_labels: list[str] | None) -> None:
             "initial_lat": pair.latitude,
             "initial_lon": pair.longitude,
             "fixed_depth_km": pair.depth_km,
+            "centroid_location_mode": mode,
             "status": result["status"],
         }
         if result["status"] == "ok":
@@ -632,6 +686,7 @@ def run(config_path: Path, output: Path, pair_labels: list[str] | None) -> None:
                     "preferred_method": "median",
                     "new_lat": result["median_lat"],
                     "new_lon": result["median_lon"],
+                    "new_depth": result["median_depth_km"],
                     "median_east_km": result["median_east_km"],
                     "median_north_km": result["median_north_km"],
                     "median_horizontal_km": result["median_horizontal_km"],
@@ -641,6 +696,7 @@ def run(config_path: Path, output: Path, pair_labels: list[str] | None) -> None:
                     "median_rms_residual_s": result["median_rms_residual_s"],
                     "soft_l1_lat": result["soft_l1_lat"],
                     "soft_l1_lon": result["soft_l1_lon"],
+                    "soft_l1_depth_km": result["soft_l1_depth_km"],
                     "soft_l1_east_km": result["soft_l1_east_km"],
                     "soft_l1_north_km": result["soft_l1_north_km"],
                     "soft_l1_event1_origin_offset_s": result["soft_l1_event1_origin_offset_s"],
@@ -711,7 +767,8 @@ def run(config_path: Path, output: Path, pair_labels: list[str] | None) -> None:
             "search_seconds_relative_to_initial_prediction": SEARCH_SECONDS,
             "minimum_snr": MIN_SNR,
             "distance_range_degrees": [MIN_DISTANCE_DEGREES, MAX_DISTANCE_DEGREES],
-            "fixed_depth_source": "pairs sheet depth",
+            "centroid_location_mode": mode,
+            "fixed_depth_source": "pairs sheet depth" if mode == "fixed_depth" else "not applicable",
             "preferred_location_fit": "median absolute residual",
             "comparison_fit": "least_squares soft_l1",
             "finite_difference_step_km": FINITE_DIFFERENCE_KM,

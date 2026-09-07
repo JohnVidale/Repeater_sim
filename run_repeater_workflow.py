@@ -5,13 +5,15 @@ Typical use from VSCode:
 
     conda run -n vidale_main python run_repeater_workflow.py
 
-The default run assumes the pair centroids in ICevents_full.xlsx are already
-current and remakes phase plots, relative offsets, uncertainties, and workbook
-offset columns:
+The ``do_centroid_relocation`` setting in ``analysis_config.json`` controls
+whether the default run first refreshes pair centroids.  The default assumes
+the centroids are already current and remakes phase plots, relative offsets,
+uncertainties, and workbook offset columns:
 
     conda run -n vidale_main python run_repeater_workflow.py
 
-To redo the fixed-depth direct-P centroid relocation and rewrite new_lat/new_lon:
+To redo the configured direct-P centroid relocation and rewrite its new
+coordinates (for ``fixed_depth`` or ``free_hypocenter`` mode):
 
     conda run -n vidale_main python run_repeater_workflow.py --do-centroid-relocation
 """
@@ -258,7 +260,7 @@ def main() -> None:
     parser.add_argument(
         "--do-centroid-relocation",
         action="store_true",
-        help="Redo direct-P fixed-depth centroid relocation and rewrite new_lat/new_lon.",
+        help="Override the JSON setting and redo the configured centroid relocation.",
     )
     parser.add_argument(
         "--skip-with-pkikp-bootstrap",
@@ -270,7 +272,12 @@ def main() -> None:
         action="store_true",
         help="Do not auto-compute and fill missing workbook 'new time shift' values.",
     )
-    parser.add_argument("--bootstrap-iterations", type=int, default=1000)
+    parser.add_argument(
+        "--bootstrap-iterations",
+        type=int,
+        default=None,
+        help="Override bootstrap_iterations in the JSON configuration.",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -293,17 +300,40 @@ def main() -> None:
 
     config_path = args.config.resolve()
     config = load_json(config_path)
+    centroid_mode = str(config.get("centroid_location_mode", "fixed_depth")).strip().lower()
+    if centroid_mode not in {"free_hypocenter", "fixed_depth", "catalog_fixed"}:
+        raise SystemExit(
+            "centroid_location_mode must be 'free_hypocenter', 'fixed_depth', "
+            "or 'catalog_fixed'"
+        )
+    bootstrap_iterations = (
+        int(args.bootstrap_iterations)
+        if args.bootstrap_iterations is not None
+        else int(config.get("bootstrap_iterations", 1000))
+    )
+    if bootstrap_iterations < 1:
+        raise SystemExit("bootstrap_iterations must be at least 1")
     workbook_path = Path(config.get("time_shift_workbook") or config["catalog_path"])
     pair_labels = [str(label) for label in config["pairs"]]
     print(f"Config: {config_path}")
     print(f"Workbook: {workbook_path}")
     print(f"Pairs ({len(pair_labels)}): {', '.join(pair_labels)}")
+    print(f"Centroid location mode: {centroid_mode}")
+    do_centroid_relocation = bool(config.get("do_centroid_relocation", False))
+    if args.do_centroid_relocation:
+        do_centroid_relocation = True
+    print(f"Do centroid relocation: {do_centroid_relocation}")
+    skip_with_pkikp_bootstrap = bool(config.get("skip_with_pkikp_bootstrap", False))
+    if args.skip_with_pkikp_bootstrap:
+        skip_with_pkikp_bootstrap = True
+    print(f"Skip PKiKP sensitivity bootstrap: {skip_with_pkikp_bootstrap}")
+    print(f"Bootstrap iterations: {bootstrap_iterations}")
 
     python = sys.executable
     relocation_output: Path | None = None
     computed_shift_output: Path | None = None
     missing_shifts: list[str] = []
-    if args.do_centroid_relocation:
+    if do_centroid_relocation and centroid_mode != "catalog_fixed":
         completed = run_command(
             [
                 python,
@@ -324,6 +354,12 @@ def main() -> None:
                 ],
                 args.dry_run,
             )
+    elif do_centroid_relocation:
+        print(
+            "Centroid location mode is catalog_fixed: retaining the EHB pair "
+            "coordinates; no spatial relocation is run.",
+            flush=True,
+        )
 
     if (
         str(config.get("time_shift_source", "computed")) == "workbook"
@@ -367,6 +403,8 @@ def main() -> None:
                 [
                     python,
                     "write_pair_time_shifts_to_workbook.py",
+                    "--config",
+                    str(config_path),
                     str(workbook_path),
                     str(computed_shift_output / "median_summary.csv"),
                 ],
@@ -384,6 +422,23 @@ def main() -> None:
     if not args.dry_run:
         output = parse_multiphase_output_path(completed.stdout)
 
+    if (
+        str(config.get("time_shift_source", "computed")) == "computed"
+        and bool(config.get("update_workbook_time_shifts_from_computed", False))
+    ):
+        run_command(
+            [
+                python,
+                "write_pair_time_shifts_to_workbook.py",
+                "--overwrite",
+                "--config",
+                str(config_path),
+                str(workbook_path),
+                str(output / "median_summary.csv"),
+            ],
+            args.dry_run,
+        )
+
     run_command(
         [python, "fit_relative_offsets.py", str(output), "--config", str(config_path)],
         args.dry_run,
@@ -398,11 +453,11 @@ def main() -> None:
             "--phase-set",
             "no_pkikp",
             "--iterations",
-            str(args.bootstrap_iterations),
+            str(bootstrap_iterations),
         ],
         args.dry_run,
     )
-    if not args.skip_with_pkikp_bootstrap:
+    if not skip_with_pkikp_bootstrap:
         run_command(
             [
                 python,
@@ -413,7 +468,7 @@ def main() -> None:
                 "--phase-set",
                 "with_pkikp",
                 "--iterations",
-                str(args.bootstrap_iterations),
+                str(bootstrap_iterations),
             ],
             args.dry_run,
         )
@@ -442,8 +497,8 @@ def main() -> None:
             relocation_output=relocation_output,
             computed_shift_output=computed_shift_output,
             missing_time_shifts_filled=missing_shifts,
-            bootstrap_iterations=args.bootstrap_iterations,
-            ran_with_pkikp=not args.skip_with_pkikp_bootstrap,
+            bootstrap_iterations=bootstrap_iterations,
+            ran_with_pkikp=not skip_with_pkikp_bootstrap,
             elapsed_time_seconds=elapsed_time_seconds,
             cpu_time_seconds=cpu_time_seconds,
         )

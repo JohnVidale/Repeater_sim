@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write median fixed-depth pair locations into ICevents_full.xlsx."""
+"""Write median pair-centroid locations into ICevents_full.xlsx."""
 
 from __future__ import annotations
 
@@ -21,14 +21,19 @@ def normalized_header(row: tuple[Any, ...]) -> dict[str, int]:
     }
 
 
-def read_summary(path: Path) -> dict[str, tuple[float, float]]:
-    values: dict[str, tuple[float, float]] = {}
+def read_summary(path: Path) -> dict[str, tuple[float, float, float | None]]:
+    values: dict[str, tuple[float, float, float | None]] = {}
     with path.open(newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
             if row.get("status") != "ok":
                 continue
             label = str(row["pair_label"]).strip()
-            values[label] = (float(row["new_lat"]), float(row["new_lon"]))
+            depth = row.get("new_depth")
+            values[label] = (
+                float(row["new_lat"]),
+                float(row["new_lon"]),
+                float(depth) if depth not in (None, "") else None,
+            )
     return values
 
 
@@ -66,6 +71,11 @@ def write_locations(workbook_path: Path, summary_path: Path) -> Path:
             tuple(cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1)))
         )
         new_lon_column = ensure_column(sheet, header, "new_lon", lon_column)
+        header = normalized_header(
+            tuple(cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1)))
+        )
+        depth_column = header["depth"]
+        new_depth_column = ensure_column(sheet, header, "new_depth", depth_column)
 
         written = 0
         for row_index in range(2, sheet.max_row + 1):
@@ -75,13 +85,17 @@ def write_locations(workbook_path: Path, summary_path: Path) -> Path:
             label = str(label_value).strip()
             if label not in locations:
                 continue
-            latitude, longitude = locations[label]
+            latitude, longitude, depth = locations[label]
             lat_cell = sheet.cell(row=row_index, column=new_lat_column)
             lon_cell = sheet.cell(row=row_index, column=new_lon_column)
             lat_cell.value = latitude
             lon_cell.value = longitude
             lat_cell.number_format = "0.0000"
             lon_cell.number_format = "0.0000"
+            if depth is not None:
+                depth_cell = sheet.cell(row=row_index, column=new_depth_column)
+                depth_cell.value = depth
+                depth_cell.number_format = "0.0"
             written += 1
 
         workbook.save(workbook_path)

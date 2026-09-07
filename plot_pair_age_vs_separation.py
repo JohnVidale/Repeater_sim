@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot repeater-pair age against the fitted 3-D event separation.
+"""Plot repeater-pair age against the preferred fitted event separation.
 
 The plot combines the preferred relative-location fit (excluding PKiKP) with
 the median direct-P correlation for each pair.  Pair groups are read from the
@@ -98,7 +98,7 @@ def main() -> Path:
             continue
         date1, date2 = dates
         years = abs((parse_date(str(date2)) - parse_date(str(date1))).days) / 365.25
-        separation = float(row["separation_3d_km"])
+        separation = float(row.get("horizontal_km") or row["separation_3d_km"])
         group = "purple" if pair in purple else "blue" if pair in blue else "other"
         color = colors[group]
         axis.scatter(years, separation, s=86, color=color, edgecolor="black", linewidth=0.6, zorder=3)
@@ -125,7 +125,7 @@ def main() -> Path:
         plotted.append(pair)
 
     axis.set_xlabel("Time between events (years)")
-    axis.set_ylabel("Preferred 3-D repeater separation (km)")
+    axis.set_ylabel("Preferred horizontal repeater separation (km)")
     axis.set_title("Repeater-pair interval and relative separation\n(labels give pair and median P-wave correlation)")
     axis.grid(True, alpha=0.28, zorder=0)
     axis.set_ylim(0, max(1.82, axis.get_ylim()[1]))

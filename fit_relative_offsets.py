@@ -16,14 +16,33 @@ import compare_repeater_pwaves as base
 
 
 EARTH_KM_PER_DEGREE = 111.195
-NO_PKIKP_PHASES = {"P", "PcP", "ScP", "PKP"}
-WITH_PKIKP_PHASES = {"P", "PcP", "ScP", "PKP", "PKiKP"}
+NO_PKIKP_PHASES = {"P", "PKP"}
+WITH_PKIKP_PHASES = {"P", "PKP", "PKiKP"}
 PREFERRED_PHASE_SET = "no_pkikp"
 PHASE_SETS = {
     "no_pkikp": NO_PKIKP_PHASES,
     "with_pkikp": WITH_PKIKP_PHASES,
     "p_only": {"P"},
 }
+
+
+def relative_location_depth_mode(config: dict[str, Any]) -> str:
+    """Return whether the pair's EHB-based common depth is fixed or free."""
+    mode = str(config.get("relative_location_depth_mode", "fixed_common")).strip().lower()
+    if mode not in {"fixed_common", "free"}:
+        raise ValueError("relative_location_depth_mode must be 'fixed_common' or 'free'")
+    return mode
+
+
+def centroid_location_mode(config: dict[str, Any]) -> str:
+    """Return the common-centroid reference requested for this run."""
+    mode = str(config.get("centroid_location_mode", "fixed_depth")).strip().lower()
+    if mode not in {"free_hypocenter", "fixed_depth", "catalog_fixed"}:
+        raise ValueError(
+            "centroid_location_mode must be 'free_hypocenter', 'fixed_depth', "
+            "or 'catalog_fixed'"
+        )
+    return mode
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
@@ -61,8 +80,8 @@ def normalized_header(row: tuple[Any, ...]) -> dict[str, int]:
     }
 
 
-def load_new_pair_locations(workbook_path: Path) -> dict[str, tuple[float, float]]:
-    """Read optional pair-sheet new_lat/new_lon reference locations."""
+def load_new_pair_locations(workbook_path: Path) -> dict[str, tuple[float, float, float | None]]:
+    """Read optional pair-sheet relocated centroid coordinates."""
     workbook = openpyxl.load_workbook(workbook_path, read_only=True, data_only=True)
     try:
         sheet = workbook["pairs"]
@@ -71,7 +90,7 @@ def load_new_pair_locations(workbook_path: Path) -> dict[str, tuple[float, float
         required = {"label", "new_lat", "new_lon"}
         if not required.issubset(header):
             return {}
-        overrides: dict[str, tuple[float, float]] = {}
+        overrides: dict[str, tuple[float, float, float | None]] = {}
         for row in rows:
             label_value = row[header["label"]]
             if label_value is None:
@@ -80,26 +99,28 @@ def load_new_pair_locations(workbook_path: Path) -> dict[str, tuple[float, float
             longitude = finite_float(row[header["new_lon"]])
             if latitude is None or longitude is None:
                 continue
-            overrides[str(label_value).strip()] = (latitude, longitude)
+            depth = finite_float(row[header["new_depth"]]) if "new_depth" in header else None
+            overrides[str(label_value).strip()] = (latitude, longitude, depth)
         return overrides
     finally:
         workbook.close()
 
 
 def apply_pair_location_override(
-    pair: base.Pair, latitude: float, longitude: float
+    pair: base.Pair, latitude: float, longitude: float, depth_km: float | None = None
 ) -> base.Pair:
+    depth = pair.depth_km if depth_km is None else depth_km
     event1 = replace(
         pair.event1,
         latitude=latitude,
         longitude=longitude,
-        depth_km=pair.depth_km,
+        depth_km=depth,
     )
     event2 = replace(
         pair.event2,
         latitude=latitude,
         longitude=longitude,
-        depth_km=pair.depth_km,
+        depth_km=depth,
     )
     return replace(
         pair,
@@ -107,6 +128,7 @@ def apply_pair_location_override(
         event2=event2,
         latitude=latitude,
         longitude=longitude,
+        depth_km=depth,
     )
 
 
@@ -189,7 +211,7 @@ def travel_time_gradient(
 
 
 def fit_median_absolute(gradients: np.ndarray, residuals: np.ndarray) -> np.ndarray:
-    bounds = [(-5.0, 5.0), (-5.0, 5.0), (-5.0, 5.0)]
+    bounds = [(-5.0, 5.0)] * int(gradients.shape[1])
 
     def objective(offset_km: np.ndarray) -> float:
         fit_residuals = residuals - gradients @ np.asarray(offset_km, dtype=float)
@@ -218,6 +240,9 @@ def fit_median_absolute(gradients: np.ndarray, residuals: np.ndarray) -> np.ndar
 
 def fit_offsets(config_path: Path, output: Path, step_km: float) -> None:
     config = base.load_json(config_path)
+    depth_mode = relative_location_depth_mode(config)
+    centroid_mode = centroid_location_mode(config)
+    solve_depth = depth_mode == "free"
     model = TauPyModel(model=str(config["taup_model"]))
     pair_labels = [str(label) for label in config["pairs"]]
     catalog_workbook_path = Path(config.get("time_shift_workbook") or config["catalog_path"])
@@ -228,7 +253,7 @@ def fit_offsets(config_path: Path, output: Path, step_km: float) -> None:
         float(config["coordinate_tolerance_depth_km"]),
     )
     location_overrides = {}
-    if catalog_workbook_path:
+    if catalog_workbook_path and centroid_mode != "catalog_fixed":
         location_overrides = load_new_pair_locations(catalog_workbook_path)
         pairs = {
             label: apply_pair_location_override(pair, *location_overrides[label])
@@ -270,7 +295,7 @@ def fit_offsets(config_path: Path, output: Path, step_km: float) -> None:
                     continue
                 total_shift = float(row["total_shift_seconds"])
                 residual = total_shift - median_shifts[pair_label]
-                gradients.append(gradient)
+                gradients.append(gradient if solve_depth else gradient[:2])
                 residuals.append(residual)
                 total_shifts.append(total_shift)
                 used_rows.append(row)
@@ -285,9 +310,11 @@ def fit_offsets(config_path: Path, output: Path, step_km: float) -> None:
                 "common_lat": pair.latitude,
                 "common_lon": pair.longitude,
                 "common_depth_km": pair.depth_km,
-                "common_location_source": "new_lat_new_lon"
+                "common_location_source": "relocated_centroid"
                 if pair_label in location_overrides
-                else "catalog_path",
+                else "catalog_ehb",
+                "centroid_location_mode": centroid_mode,
+                "relative_location_depth_mode": depth_mode,
                 "n": count,
             }
             if count < 4:
@@ -323,7 +350,8 @@ def fit_offsets(config_path: Path, output: Path, step_km: float) -> None:
             offset = fit_median_absolute(gradient_array, residual_array)
             predicted = gradient_array @ offset
             fit_residuals = residual_array - predicted
-            east, north, depth = [float(value) for value in offset]
+            east, north = [float(value) for value in offset[:2]]
+            depth = float(offset[2]) if solve_depth else 0.0
             delta_lat, delta_lon = location_delta(pair.latitude, pair.longitude, east, north)
             event1_lat = pair.latitude - 0.5 * delta_lat
             event1_lon = pair.longitude - 0.5 * delta_lon

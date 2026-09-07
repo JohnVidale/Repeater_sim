@@ -33,6 +33,11 @@ def read_relative_locations(path: Path) -> dict[str, dict[str, float | str | int
     with path.open(newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
             pair = row["pair"].strip()
+            # A pair with fewer than four accepted measurements is retained in
+            # the fit table with intentionally blank location fields.  It has
+            # no defensible offset to write to the workbook.
+            if not str(row.get("event1_lat", "")).strip():
+                continue
             rows[pair] = {
                 "phase_set": row["phase_set"],
                 "n": int(row["n"]),

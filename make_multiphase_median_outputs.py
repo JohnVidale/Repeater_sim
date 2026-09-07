@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import math
 import time
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -17,22 +18,19 @@ import numpy as np
 import openpyxl
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Normalize
+from obspy import read
+from obspy.signal.trigger import aic_simple
 from obspy.taup import TauPyModel
 
 import compare_repeater_pwaves as base
 
 
-PHASES = ("P", "PcP", "ScP", "PKiKP", "PKP")
+PHASES = ("P", "PKiKP", "PKP")
 MARKED_PHASES = (
     "P",
     "pP",
     "sP",
     "PP",
-    "PcP",
-    "ScP",
-    "sPcP",
-    "pPcP",
-    "pScP",
     "PKP",
     "sPKP",
     "pPKP",
@@ -43,14 +41,18 @@ MARKED_PHASES = (
     "sPKIKP",
     "pPKIKP",
 )
-PHASE_MARKERS = {"P": "o", "PcP": "s", "ScP": "^", "PKiKP": "D", "PKP": "P"}
+PHASE_MARKERS = {"P": "o", "PKiKP": "D", "PKP": "P"}
 PROGRESS_STATION_INTERVAL = 10
+AUTOMATIC_PICK_FILTER_HZ = (0.7, 4.0)
+AUTOMATIC_PICK_SEARCH_SECONDS = (-6.0, 8.0)
+AUTOMATIC_PICK_MIN_SNR = 2.5
+AUTOMATIC_PICK_MAX_OFFSET_SECONDS = 5.5
 
 
 def phase_is_usable_for_shift(phase: str, distance_degrees: float) -> bool:
     """Return whether this phase/station geometry should enter shift summaries."""
-    if phase in {"PcP", "ScP"}:
-        return distance_degrees < 40.0
+    if phase not in PHASES:
+        return False
     if phase == "PKiKP":
         return distance_degrees > 100.0
     return True
@@ -90,7 +92,9 @@ def finite_float(value: Any) -> float | None:
     return parsed
 
 
-def read_workbook_new_pair_locations(workbook_path: Path) -> dict[str, tuple[float, float]]:
+def read_workbook_new_pair_locations(
+    workbook_path: Path,
+) -> dict[str, tuple[float, float, float | None]]:
     workbook = openpyxl.load_workbook(workbook_path, read_only=True, data_only=True)
     try:
         sheet = workbook["pairs"]
@@ -102,7 +106,7 @@ def read_workbook_new_pair_locations(workbook_path: Path) -> dict[str, tuple[flo
         }
         if not {"label", "new_lat", "new_lon"}.issubset(headers):
             return {}
-        locations: dict[str, tuple[float, float]] = {}
+        locations: dict[str, tuple[float, float, float | None]] = {}
         for row in rows:
             label = row[headers["label"]] if headers["label"] < len(row) else None
             if label is None:
@@ -111,30 +115,32 @@ def read_workbook_new_pair_locations(workbook_path: Path) -> dict[str, tuple[flo
             longitude = finite_float(row[headers["new_lon"]])
             if latitude is None or longitude is None:
                 continue
-            locations[str(label).strip()] = (latitude, longitude)
+            depth = finite_float(row[headers["new_depth"]]) if "new_depth" in headers else None
+            locations[str(label).strip()] = (latitude, longitude, depth)
         return locations
     finally:
         workbook.close()
 
 
 def apply_pair_location_override(
-    pair: base.Pair, latitude: float, longitude: float
+    pair: base.Pair, latitude: float, longitude: float, depth_km: float | None = None
 ) -> base.Pair:
+    depth = pair.depth_km if depth_km is None else depth_km
     event1 = base.Event(
         pair.event1.event_id,
         pair.event1.origin,
         latitude,
         longitude,
-        pair.depth_km,
+        depth,
     )
     event2 = base.Event(
         pair.event2.event_id,
         pair.event2.origin,
         latitude,
         longitude,
-        pair.depth_km,
+        depth,
     )
-    return base.Pair(pair.label, event1, event2, latitude, longitude, pair.depth_km)
+    return base.Pair(pair.label, event1, event2, latitude, longitude, depth)
 
 
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -151,7 +157,21 @@ def phase_arrival(
     station_latitude: float,
     station_longitude: float,
     phase: str,
+    cache: dict[tuple[float | int | str, ...], tuple[float | None, float, float | None, float | None]] | None = None,
 ) -> tuple[float | None, float, float | None, float | None]:
+    """Return one TauP arrival, reusing an identical event/station/phase query."""
+    cache_key = (
+        event.event_id,
+        float(event.latitude),
+        float(event.longitude),
+        float(event.depth_km),
+        float(event.origin),
+        float(station_latitude),
+        float(station_longitude),
+        phase,
+    )
+    if cache is not None and cache_key in cache:
+        return cache[cache_key]
     distance = float(
         base.locations2degrees(
             event.latitude,
@@ -166,17 +186,94 @@ def phase_arrival(
         phase_list=[phase],
     )
     if not arrivals:
-        return None, distance, None, None
-    exact = [arrival for arrival in arrivals if arrival.name == phase]
-    if exact:
-        arrivals = exact
-    arrival = arrivals[0]
-    return (
-        float(event.origin) + float(arrival.time),
-        distance,
-        float(arrival.time),
-        float(arrival.takeoff_angle),
+        result = (None, distance, None, None)
+    else:
+        exact = [arrival for arrival in arrivals if arrival.name == phase]
+        if exact:
+            arrivals = exact
+        arrival = arrivals[0]
+        result = (
+            float(event.origin) + float(arrival.time),
+            distance,
+            float(arrival.time),
+            float(arrival.takeoff_angle),
+        )
+    if cache is not None:
+        cache[cache_key] = result
+    return result
+
+
+def automatic_aic_pick(
+    path: Path,
+    predicted_epoch: float,
+    trace_cache: dict[Path, tuple[float, float, np.ndarray]] | None = None,
+) -> tuple[float | None, float | None, bool, str]:
+    """Return a relocation-style AIC pick relative to a predicted phase arrival.
+
+    This is a plot-only QC pick.  Differential timing remains the same-phase
+    correlation lag measured elsewhere in this module.
+    """
+    cached = trace_cache.get(path) if trace_cache is not None else None
+    if cached is None:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            try:
+                trace = read(str(path))[0].copy()
+                trace.detrend("demean")
+                trace.detrend("linear")
+                trace.taper(max_percentage=0.05, max_length=2.0, type="cosine")
+                trace.filter(
+                    "bandpass",
+                    freqmin=AUTOMATIC_PICK_FILTER_HZ[0],
+                    freqmax=AUTOMATIC_PICK_FILTER_HZ[1],
+                    corners=4,
+                    zerophase=True,
+                )
+                cached = (
+                    float(trace.stats.starttime),
+                    float(trace.stats.sampling_rate),
+                    np.asarray(trace.data, dtype=float),
+                )
+            except Exception as exc:
+                return None, None, False, f"preprocess_error:{type(exc).__name__}"
+        if trace_cache is not None:
+            trace_cache[path] = cached
+    start_epoch, sampling_hz, data = cached
+    relative = start_epoch + np.arange(len(data)) / sampling_hz - predicted_epoch
+    indices = np.flatnonzero(
+        (relative >= AUTOMATIC_PICK_SEARCH_SECONDS[0])
+        & (relative < AUTOMATIC_PICK_SEARCH_SECONDS[1])
     )
+    if len(indices) < int(8.0 * sampling_hz):
+        return None, None, False, "insufficient_search_samples"
+    characteristic = np.asarray(aic_simple(data[indices]), dtype=float)
+    edge = max(1, int(round(0.5 * sampling_hz)))
+    interior = characteristic[edge:-edge]
+    if not len(interior) or not np.any(np.isfinite(interior)):
+        return None, None, False, "undefined_aic"
+    pick_index = int(indices[edge + int(np.nanargmin(interior))])
+    pick_epoch = start_epoch + pick_index / sampling_hz
+    pick_offset = float(pick_epoch - predicted_epoch)
+    pick_relative = start_epoch + np.arange(len(data)) / sampling_hz - pick_epoch
+    noise = data[(pick_relative >= -8.0) & (pick_relative < -2.0)]
+    signal = data[(pick_relative >= 0.0) & (pick_relative < 4.0)]
+    if len(noise) < int(3.0 * sampling_hz) or len(signal) < int(2.0 * sampling_hz):
+        return pick_offset, None, False, "insufficient_snr_samples"
+    noise_rms = float(np.sqrt(np.mean(np.square(noise))))
+    signal_rms = float(np.sqrt(np.mean(np.square(signal))))
+    snr = signal_rms / noise_rms if noise_rms > 0.0 else math.inf
+    edge_margin = min(
+        pick_offset - AUTOMATIC_PICK_SEARCH_SECONDS[0],
+        AUTOMATIC_PICK_SEARCH_SECONDS[1] - pick_offset,
+    )
+    reasons = []
+    if snr < AUTOMATIC_PICK_MIN_SNR:
+        reasons.append(f"snr<{AUTOMATIC_PICK_MIN_SNR:g}")
+    if edge_margin < 0.75:
+        reasons.append("pick_near_search_edge")
+    if abs(pick_offset) > AUTOMATIC_PICK_MAX_OFFSET_SECONDS:
+        reasons.append(f"pick_offset>{AUTOMATIC_PICK_MAX_OFFSET_SECONDS:g}s")
+    return pick_offset, snr, not reasons, ";".join(reasons)
 
 
 def extract_normalized_plot(
@@ -216,12 +313,17 @@ def extract_normalized_plot(
 
 
 def display_shift(row: dict[str, Any]) -> float:
+    if row.get("fine_search_center_seconds") not in (None, ""):
+        return float(row["residual_lag_seconds"])
     preapplied = row.get("preapplied_time_shift")
     if isinstance(preapplied, str):
         preapplied = preapplied.strip().lower() == "true"
     if preapplied:
         return float(row["residual_lag_seconds"])
     return float(row["lag_seconds"])
+
+
+MAX_TRACES_PER_PHASE_PLOT = 20
 
 
 def plot_phase_waveforms(
@@ -231,68 +333,119 @@ def plot_phase_waveforms(
     rows: list[dict[str, Any]],
     threshold: float,
 ) -> None:
-    good = sorted(
-        [row for row in rows if row["phase"] == phase and row["good"]],
-        key=lambda row: row["epicentral_distance_degrees"],
-        reverse=True,
+    plotted = sorted(
+        [row for row in rows if row["phase"] == phase],
+        key=lambda row: (
+            not bool(row["good"]),
+            -float(row["epicentral_distance_degrees"]),
+        ),
     )
-    if not good:
+    if not plotted:
         return
-    height = max(5.0, 1.0 + 0.45 * len(good))
-    figure, axis = plt.subplots(figsize=(12, height), constrained_layout=True)
-    for index, row in enumerate(good):
-        baseline = (len(good) - 1 - index) * 5.0
-        axis.plot(row["plot_time"], row["plot1"] + baseline, color="tab:blue", linewidth=0.7)
-        axis.plot(row["plot_time"], row["plot2"] + baseline, color="tab:red", linewidth=0.7)
-        x_min = float(row["plot_time"][0])
-        x_max = float(row["plot_time"][-1])
-        for marked_phase, marked_time in row.get("marked_phase_times", {}).items():
-            if x_min <= marked_time <= x_max:
+    for page_number, start in enumerate(
+        range(0, len(plotted), MAX_TRACES_PER_PHASE_PLOT), start=1
+    ):
+        page_rows = plotted[start : start + MAX_TRACES_PER_PHASE_PLOT]
+        height = max(5.0, 1.0 + 0.52 * len(page_rows))
+        figure, axis = plt.subplots(figsize=(12, height), constrained_layout=True)
+        row_labels: list[str] = []
+        baselines: list[float] = []
+        for index, row in enumerate(page_rows):
+            baseline = (len(page_rows) - 1 - index) * 5.0
+            accepted = bool(row["good"])
+            baselines.append(baseline)
+            trace_alpha = 1.0 if accepted else 0.55
+            plot1 = np.asarray(row["plot1"], dtype=float)
+            plot2 = np.asarray(row["plot2"], dtype=float)
+            if not accepted:
+                # A rejected AIC pick can place the correlation window on a
+                # near-zero portion of a trace.  Scale rejected traces from
+                # their displayed waveform instead, solely for readable QC.
+                display_scale = max(
+                    float(np.nanpercentile(np.abs(plot1), 95)),
+                    float(np.nanpercentile(np.abs(plot2), 95)),
+                    np.finfo(float).eps,
+                )
+                plot1 = 1.8 * plot1 / display_scale
+                plot2 = 1.8 * plot2 / display_scale
+            axis.plot(
+                row["plot_time"], plot1 + baseline, color="tab:blue",
+                linewidth=0.7, linestyle="-", alpha=trace_alpha,
+            )
+            axis.plot(
+                row["plot_time"], plot2 + baseline, color="tab:red",
+                linewidth=0.7, linestyle="-", alpha=trace_alpha,
+            )
+            x_min = float(row["plot_time"][0])
+            x_max = float(row["plot_time"][-1])
+            for marked_phase, marked_time in row.get("marked_phase_times", {}).items():
+                if x_min <= marked_time <= x_max:
+                    axis.vlines(
+                        marked_time,
+                        baseline - 2.15,
+                        baseline + 2.15,
+                        color="black",
+                        linewidth=0.75,
+                        alpha=0.82,
+                    )
+                    axis.text(
+                        marked_time,
+                        baseline + 2.45,
+                        marked_phase,
+                        color="black",
+                        fontsize=7,
+                        rotation=90,
+                        ha="center",
+                        va="bottom",
+                        bbox={
+                            "facecolor": "white",
+                            "edgecolor": "none",
+                            "alpha": 0.72,
+                            "pad": 0.4,
+                        },
+                    )
+            for event_label, pick_time, color in (
+                ("E1 AIC", row.get("automatic_pick1_plot_time"), "tab:blue"),
+                ("E2 AIC", row.get("automatic_pick2_plot_time"), "tab:red"),
+            ):
+                if pick_time is None or not x_min <= float(pick_time) <= x_max:
+                    continue
                 axis.vlines(
-                    marked_time,
+                    float(pick_time),
                     baseline - 2.15,
                     baseline + 2.15,
-                    color="black",
-                    linewidth=0.75,
-                    alpha=0.82,
+                    color=color,
+                    linewidth=1.15,
+                    linestyle="--",
+                    alpha=0.95,
+                    label=event_label if index == 0 else None,
                 )
-                axis.text(
-                    marked_time,
-                    baseline + 2.45,
-                    marked_phase,
-                    color="black",
-                    fontsize=7,
-                    rotation=90,
-                    ha="center",
-                    va="bottom",
-                    bbox={
-                        "facecolor": "white",
-                        "edgecolor": "none",
-                        "alpha": 0.72,
-                        "pad": 0.4,
-                    },
-                )
-        axis.text(
-            x_min + 0.01 * (x_max - x_min),
-            baseline + 2.1,
-            (
-                f"{row['station_id']} {row['epicentral_distance_degrees']:.1f}° "
-                f"az={row['azimuth_degrees']:.0f}\n"
-                f"CC={row['cc']:.2f} shift={display_shift(row):+.2f}s"
-            ),
-            fontsize=7,
-            va="top",
+            status = "accepted" if accepted else "rejected (display-normalized)"
+            row_labels.append(
+                f"{row['station_id']}  CC={row['cc']:.2f}  "
+                f"shift={display_shift(row):+.2f}s  {status}"
+            )
+        axis.axvspan(-10.0, 20.0, color="0.8", alpha=0.25)
+        axis.axvline(0.0, color="0.3", linewidth=0.6)
+        axis.set_yticks(baselines, row_labels, fontsize=7)
+        for tick, row in zip(axis.get_yticklabels(), page_rows):
+            tick.set_color("0.15" if bool(row["good"]) else "0.38")
+        handles, labels = axis.get_legend_handles_labels()
+        if handles:
+            axis.legend(handles, labels, loc="upper right", fontsize=7, framealpha=0.85)
+        axis.set_xlabel(f"Time relative to picked {phase} (s)")
+        axis.set_title(
+            f"{pair.label} {phase}: event {pair.event1.event_id} blue vs "
+            f"{pair.event2.event_id} red; rows {start + 1}–{start + len(page_rows)} of {len(plotted)}; "
+            "solid traces; dashed lines are accepted AIC picks"
         )
-    axis.axvspan(-10.0, 20.0, color="0.8", alpha=0.25)
-    axis.axvline(0.0, color="0.3", linewidth=0.6)
-    axis.set_yticks([])
-    axis.set_xlabel(f"Time relative to predicted {phase} (s)")
-    axis.set_title(
-        f"{pair.label} {phase}: event {pair.event1.event_id} blue vs "
-        f"{pair.event2.event_id} red; CC >= {threshold:g}"
-    )
-    figure.savefig(output / "phase_plots" / f"{pair.label}_{phase}.png", dpi=180, bbox_inches="tight")
-    plt.close(figure)
+        suffix = "" if len(plotted) <= MAX_TRACES_PER_PHASE_PLOT else f"_{page_number:02d}"
+        figure.savefig(
+            output / "phase_plots" / f"{pair.label}_{phase}{suffix}.png",
+            dpi=180,
+            bbox_inches="tight",
+        )
+        plt.close(figure)
 
 
 def plot_median_residual_geometry(
@@ -386,18 +539,21 @@ def plot_shift_summary(
         for row in good
     )
     reference_shift = 0.0 if preapplied else median_shift
+    fine_centered = any(row.get("fine_search_center_seconds") not in (None, "") for row in good)
     y_label = (
-        "residual shift after pre-applied time shift (s)"
+        "residual shift after pair-wide shift (s)"
+        if fine_centered
+        else "residual shift after pre-applied time shift (s)"
         if preapplied
         else "event2 shift relative to prediction (s)"
     )
     title_suffix = (
         "dashed line = 0 s residual"
-        if preapplied
+        if preapplied or fine_centered
         else f"dashed line = median {median_shift:+.2f} s"
     )
     figure, (axis1, axis2) = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
-    colors = {"P": "tab:blue", "PcP": "tab:orange", "ScP": "tab:green", "PKiKP": "tab:red", "PKP": "tab:purple"}
+    colors = {"P": "tab:blue", "PKiKP": "tab:red", "PKP": "tab:purple"}
     for phase in PHASES:
         phase_rows = [row for row in good if row["phase"] == phase]
         if not phase_rows:
@@ -437,12 +593,17 @@ def run(
     time_shift_source_override: str | None = None,
 ) -> Path:
     config = base.load_json(config_path)
+    centroid_mode = str(config.get("centroid_location_mode", "fixed_depth")).strip().lower()
+    if centroid_mode not in {"free_hypocenter", "fixed_depth", "catalog_fixed"}:
+        raise base.AnalysisError(
+            "centroid_location_mode must be 'free_hypocenter', 'fixed_depth', or 'catalog_fixed'"
+        )
     time_shift_source = str(
         time_shift_source_override or config.get("time_shift_source", "computed")
     )
-    if time_shift_source not in {"computed", "workbook"}:
+    if time_shift_source not in {"computed", "workbook", "picked"}:
         raise base.AnalysisError(
-            "time_shift_source must be either 'computed' or 'workbook'"
+            "time_shift_source must be 'computed', 'workbook', or 'picked'"
         )
     configured_time_shift_workbook = config.get("time_shift_workbook")
     time_shift_workbook = (
@@ -457,6 +618,11 @@ def run(
     (output / "median_residual_geometry_plots").mkdir()
 
     model = TauPyModel(model=str(config["taup_model"]))
+    arrival_cache: dict[
+        tuple[float | int | str, ...],
+        tuple[float | None, float, float | None, float | None],
+    ] = {}
+    automatic_pick_trace_cache: dict[Path, tuple[float, float, np.ndarray]] = {}
     pair_labels = [str(label) for label in config["pairs"]]
     catalog_workbook = time_shift_workbook or Path(config["catalog_path"])
     pairs = base.resolve_catalog(
@@ -465,7 +631,11 @@ def run(
         float(config["coordinate_tolerance_degrees"]),
         float(config["coordinate_tolerance_depth_km"]),
     )
-    new_pair_locations = read_workbook_new_pair_locations(catalog_workbook)
+    new_pair_locations = (
+        read_workbook_new_pair_locations(catalog_workbook)
+        if centroid_mode != "catalog_fixed"
+        else {}
+    )
     pairs = {
         label: apply_pair_location_override(pair, *new_pair_locations[label])
         if label in new_pair_locations
@@ -481,12 +651,13 @@ def run(
     preapply_time_shifts = time_shift_source == "workbook"
     lag_search_seconds = (
         float(config["residual_lag_search_seconds"])
-        if preapply_time_shifts
+        if preapply_time_shifts or time_shift_source == "picked"
         else float(config["lag_search_seconds"])
     )
 
     phase_windows = {phase: [-10.0, 20.0] for phase in PHASES}
     phase_windows["P"] = list(config["correlation_window_seconds"])
+    phase_windows["PKiKP"] = [-5.0, 10.0]
     plot_windows = {phase: [-20.0, 60.0] for phase in PHASES}
     plot_windows["P"] = list(config["plot_window_seconds"])
 
@@ -515,6 +686,7 @@ def run(
             if not base.station_is_excluded(station_id, excluded)
         ]
         pair_plot_rows: list[dict[str, Any]] = []
+        trace_cache: dict[str, tuple[Path, Path, base.ProcessedTrace, base.ProcessedTrace]] = {}
         pair_exception_start = len(exception_rows)
         print(
             f"Pair {pair_number}/{total_pairs} {pair_label}: "
@@ -541,6 +713,7 @@ def run(
                 )
                 trace1 = base.preprocess_trace(path1, config)
                 trace2 = base.preprocess_trace(path2, config)
+                trace_cache[station_id] = (path1, path2, trace1, trace2)
             except Exception as exc:
                 exception_rows.append(
                     {
@@ -563,16 +736,13 @@ def run(
             )
             for phase in PHASES:
                 try:
-                    applied_time_shift = (
-                        workbook_time_shifts[pair_label]
-                        if preapply_time_shifts and pair_label in workbook_time_shifts
-                        else 0.0
-                    )
                     arrival1, distance1, travel1, takeoff = phase_arrival(
-                        model, pair.event1, trace1.station_latitude, trace1.station_longitude, phase
+                        model, pair.event1, trace1.station_latitude, trace1.station_longitude, phase,
+                        arrival_cache,
                     )
                     arrival2, distance2, travel2, _ = phase_arrival(
-                        model, pair.event2, trace2.station_latitude, trace2.station_longitude, phase
+                        model, pair.event2, trace2.station_latitude, trace2.station_longitude, phase,
+                        arrival_cache,
                     )
                     if arrival1 is None or arrival2 is None:
                         exception_rows.append(
@@ -585,19 +755,106 @@ def run(
                             }
                         )
                         continue
+                    pick1_offset, pick1_snr, pick1_accepted, pick1_reason = automatic_aic_pick(
+                        path1, arrival1, automatic_pick_trace_cache
+                    )
+                    pick2_offset, pick2_snr, pick2_accepted, pick2_reason = automatic_aic_pick(
+                        path2, arrival2, automatic_pick_trace_cache
+                    )
+                    if not (pick1_accepted and pick2_accepted):
+                        plot_arrival1 = arrival1 + (pick1_offset or 0.0)
+                        plot_arrival2 = arrival2 + (pick2_offset or 0.0)
+                        plot_time, plot1, plot2, plot_scale1, plot_scale2 = extract_normalized_plot(
+                            trace1,
+                            trace2,
+                            plot_arrival1,
+                            plot_arrival2,
+                            0.0,
+                            plot_windows[phase],
+                            phase_windows[phase],
+                        )
+                        rejected_reason = (
+                            "rejected: automatic AIC pick; "
+                            f"event1={pick1_reason or 'accepted'}; "
+                            f"event2={pick2_reason or 'accepted'}"
+                        )
+                        pair_plot_rows.append(
+                            {
+                                "pair_label": pair_label,
+                                "event1": pair.event1.event_id,
+                                "event2": pair.event2.event_id,
+                                "phase": phase,
+                                "station_id": station_id,
+                                "station_latitude": trace1.station_latitude,
+                                "station_longitude": trace1.station_longitude,
+                                "epicentral_distance_degrees": 0.5 * (distance1 + distance2),
+                                "azimuth_degrees": azimuth,
+                                "takeoff_angle_degrees": takeoff,
+                                "predicted_travel_time1_s": travel1,
+                                "predicted_travel_time2_s": travel2,
+                                "lag_seconds": 0.0,
+                                "applied_time_shift_seconds": 0.0,
+                                "preapplied_time_shift": False,
+                                "residual_lag_seconds": 0.0,
+                                "total_shift_seconds": 0.0,
+                                "cc": math.nan,
+                                "boundary": False,
+                                "phase_geometry_usable": phase_is_usable_for_shift(
+                                    phase, 0.5 * (distance1 + distance2)
+                                ),
+                                "good": False,
+                                "rejection_reason": rejected_reason,
+                                "automatic_pick1_offset_s": pick1_offset,
+                                "automatic_pick1_snr": pick1_snr,
+                                "automatic_pick1_accepted": pick1_accepted,
+                                "automatic_pick1_reason": pick1_reason,
+                                "automatic_pick2_offset_s": pick2_offset,
+                                "automatic_pick2_snr": pick2_snr,
+                                "automatic_pick2_accepted": pick2_accepted,
+                                "automatic_pick2_reason": pick2_reason,
+                                "trace1_path": str(path1),
+                                "trace2_path": str(path2),
+                                "plot_scale1_correlation_window_rms": plot_scale1,
+                                "plot_scale2_correlation_window_rms": plot_scale2,
+                                "plot_time": plot_time,
+                                "plot1": plot1,
+                                "plot2": plot2,
+                                "marked_phase_times": {},
+                                "automatic_pick1_plot_time": 0.0 if pick1_accepted else None,
+                                "automatic_pick2_plot_time": 0.0 if pick2_accepted else None,
+                            }
+                        )
+                        exception_rows.append(
+                            {
+                                "pair_label": pair_label,
+                                "station_id": station_id,
+                                "phase": phase,
+                                "exception": "automatic_phase_pick_rejected",
+                                "details": (
+                                    f"event1={pick1_reason or 'accepted'}; "
+                                    f"event2={pick2_reason or 'accepted'}"
+                                ),
+                            }
+                        )
+                        continue
+                    if pick1_offset is None or pick2_offset is None:
+                        raise base.AnalysisError("Accepted automatic phase pick lacks an offset")
+                    correlation_arrival1 = arrival1 + pick1_offset
+                    correlation_arrival2 = arrival2 + pick2_offset
+                    applied_time_shift = pick2_offset - pick1_offset
                     lag, cc, boundary, _, _ = base.signed_lag_correlation(
                         trace1,
                         trace2,
-                        arrival1,
-                        arrival2 + applied_time_shift,
+                        correlation_arrival1,
+                        correlation_arrival2,
                         phase_windows[phase],
                         lag_search_seconds,
                     )
                     plot_time, plot1, plot2, plot_scale1, plot_scale2 = extract_normalized_plot(
                         trace1,
                         trace2,
-                        arrival1,
-                        arrival2 + applied_time_shift,
+                        correlation_arrival1,
+                        correlation_arrival2,
                         lag,
                         plot_windows[phase],
                         phase_windows[phase],
@@ -611,10 +868,11 @@ def run(
                             trace1.station_latitude,
                             trace1.station_longitude,
                             marked_phase,
+                            arrival_cache,
                         )
                         if marked_arrival is None:
                             continue
-                        relative_marked_time = float(marked_arrival - arrival1)
+                        relative_marked_time = float(marked_arrival - correlation_arrival1)
                         if plot_time[0] <= relative_marked_time <= plot_time[-1]:
                             marked_phase_times[marked_phase] = relative_marked_time
                     distance_degrees = 0.5 * (distance1 + distance2)
@@ -637,13 +895,21 @@ def run(
                         "predicted_travel_time2_s": travel2,
                         "lag_seconds": total_shift,
                         "applied_time_shift_seconds": applied_time_shift,
-                        "preapplied_time_shift": preapply_time_shifts,
+                        "preapplied_time_shift": False,
                         "residual_lag_seconds": float(lag),
                         "total_shift_seconds": total_shift,
                         "cc": float(cc),
                         "boundary": bool(boundary),
                         "phase_geometry_usable": phase_geometry_usable,
                         "good": good,
+                        "automatic_pick1_offset_s": pick1_offset,
+                        "automatic_pick1_snr": pick1_snr,
+                        "automatic_pick1_accepted": pick1_accepted,
+                        "automatic_pick1_reason": pick1_reason,
+                        "automatic_pick2_offset_s": pick2_offset,
+                        "automatic_pick2_snr": pick2_snr,
+                        "automatic_pick2_accepted": pick2_accepted,
+                        "automatic_pick2_reason": pick2_reason,
                         "trace1_path": str(path1),
                         "trace2_path": str(path2),
                         "plot_scale1_correlation_window_rms": plot_scale1,
@@ -657,6 +923,11 @@ def run(
                             "plot1": plot1,
                             "plot2": plot2,
                             "marked_phase_times": marked_phase_times,
+                            # Plot time is referenced to event 1's picked
+                            # arrival; event 2's picked arrival lies one
+                            # residual correlation lag earlier on this axis.
+                            "automatic_pick1_plot_time": 0.0,
+                            "automatic_pick2_plot_time": -float(lag),
                         }
                     )
                     pair_plot_rows.append(pair_plot_row)
@@ -671,15 +942,110 @@ def run(
                         }
                     )
 
+        # Computed mode uses a two-stage search.  The first pass above finds
+        # the broad pair shift.  Re-run every station/phase around that common
+        # shift using the configured residual window, then retain only the
+        # fine residuals for location and station-differential products.
+        computed_median_shift = (
+            float(np.median([row["total_shift_seconds"] for row in pair_plot_rows if row["good"]]))
+            if any(row["good"] for row in pair_plot_rows)
+            else math.nan
+        )
+        if time_shift_source == "computed" and math.isfinite(computed_median_shift):
+            for row in pair_plot_rows:
+                try:
+                    _, _, trace1, trace2 = trace_cache[row["station_id"]]
+                    arrival1, _, travel1, takeoff = phase_arrival(
+                        model, pair.event1, trace1.station_latitude, trace1.station_longitude,
+                        row["phase"], arrival_cache,
+                    )
+                    arrival2, _, travel2, _ = phase_arrival(
+                        model, pair.event2, trace2.station_latitude, trace2.station_longitude,
+                        row["phase"], arrival_cache,
+                    )
+                    fine_lag, cc, boundary, _, _ = base.signed_lag_correlation(
+                        trace1,
+                        trace2,
+                        arrival1,
+                        arrival2 + computed_median_shift,
+                        phase_windows[row["phase"]],
+                        float(config["residual_lag_search_seconds"]),
+                    )
+                    plot_time, plot1, plot2, plot_scale1, plot_scale2 = extract_normalized_plot(
+                        trace1,
+                        trace2,
+                        arrival1,
+                        arrival2 + computed_median_shift,
+                        fine_lag,
+                        plot_windows[row["phase"]],
+                        phase_windows[row["phase"]],
+                    )
+                    row.update(
+                        {
+                            "lag_seconds": computed_median_shift + float(fine_lag),
+                            "applied_time_shift_seconds": computed_median_shift,
+                            "fine_search_center_seconds": computed_median_shift,
+                            "residual_lag_seconds": float(fine_lag),
+                            "total_shift_seconds": computed_median_shift + float(fine_lag),
+                            "cc": float(cc),
+                            "boundary": bool(boundary),
+                            "good": bool(
+                                cc >= threshold
+                                and not boundary
+                                and row["phase_geometry_usable"]
+                            ),
+                            "predicted_travel_time1_s": travel1,
+                            "predicted_travel_time2_s": travel2,
+                            "takeoff_angle_degrees": takeoff,
+                            "plot_scale1_correlation_window_rms": plot_scale1,
+                            "plot_scale2_correlation_window_rms": plot_scale2,
+                        }
+                    )
+                    row["plot_time"] = plot_time
+                    row["plot1"] = plot1
+                    row["plot2"] = plot2
+                    row["automatic_pick2_plot_time"] = (
+                        float(row["automatic_pick2_offset_s"])
+                        - computed_median_shift
+                        - float(fine_lag)
+                        if row.get("automatic_pick2_accepted")
+                        and row.get("automatic_pick2_offset_s") is not None
+                        else None
+                    )
+                except Exception as exc:
+                    row["good"] = False
+                    exception_rows.append(
+                        {
+                            "pair_label": pair_label,
+                            "station_id": row["station_id"],
+                            "phase": row["phase"],
+                            "exception": type(exc).__name__,
+                            "details": f"fine search: {str(exc)[:160]}",
+                        }
+                    )
+
+        # Replace this pair's broad-pass measurement rows with the refined
+        # rows so CSV consumers see the fine residuals too.
+        measurement_rows[:] = [
+            row for row in measurement_rows if row["pair_label"] != pair_label
+        ]
+        measurement_rows.extend(
+            {
+                key: value
+                for key, value in row.items()
+                if key not in {"plot_time", "plot1", "plot2", "marked_phase_times"}
+            }
+            for row in pair_plot_rows
+        )
+
         good_rows = [row for row in pair_plot_rows if row["good"]]
         measured_count = len(pair_plot_rows)
         good_count = len(good_rows)
         exception_count = len(exception_rows) - pair_exception_start
-        computed_median_shift = (
-            float(np.median([row["total_shift_seconds"] for row in good_rows]))
-            if good_rows
-            else math.nan
-        )
+        if time_shift_source == "computed":
+            # Keep the broad estimate as the pair reference; the fine pass
+            # must not move the common shift itself.
+            computed_median_shift = computed_median_shift
         if time_shift_source == "workbook":
             if pair_label not in workbook_time_shifts:
                 raise base.AnalysisError(
@@ -752,7 +1118,15 @@ def run(
                     "median_cc": float(np.median(ccs)) if len(ccs) else "",
                 }
             )
-        plot_shift_summary(output, pair_label, pair_plot_rows, median_shift, lag_search_seconds)
+        plot_shift_summary(
+            output,
+            pair_label,
+            pair_plot_rows,
+            median_shift,
+            float(config["residual_lag_search_seconds"])
+            if time_shift_source == "computed"
+            else lag_search_seconds,
+        )
         plot_median_residual_geometry(
             output,
             pair_label,
@@ -786,7 +1160,11 @@ def run(
                 "time_shift_source": time_shift_source,
                 "time_shift_workbook": str(time_shift_workbook) if time_shift_workbook else "",
                 "catalog_workbook": str(catalog_workbook),
-                "pair_location_source": "new_lat_new_lon_when_available",
+                "pair_location_source": (
+                    "catalog_ehb" if centroid_mode == "catalog_fixed"
+                    else "relocated_centroid_when_available"
+                ),
+                "centroid_location_mode": centroid_mode,
                 "preapplied_time_shifts": preapply_time_shifts,
                 "lag_search_seconds": lag_search_seconds,
                 "phase_plot_normalization": (
@@ -795,10 +1173,16 @@ def run(
                     "within that same window"
                 ),
                 "phase_selection_rules": {
-                    "PcP": "epicentral_distance_degrees < 40",
-                    "ScP": "epicentral_distance_degrees < 40",
                     "PKiKP": "epicentral_distance_degrees > 100",
                     "PKIKP": "marked on plots only; not measured or fit",
+                },
+                "automatic_plot_qc_picks": {
+                    "phases": list(PHASES),
+                    "method": "AIC minimum after 0.7-4 Hz zero-phase filtering",
+                    "search_seconds_relative_to_predicted_arrival": AUTOMATIC_PICK_SEARCH_SECONDS,
+                    "minimum_snr": AUTOMATIC_PICK_MIN_SNR,
+                    "maximum_absolute_offset_seconds": AUTOMATIC_PICK_MAX_OFFSET_SECONDS,
+                    "use": "correlation-window centers and plot markers; the residual lag remains the waveform measurement",
                 },
                 "pairs": pair_labels,
                 "phases": PHASES,
