@@ -9,6 +9,8 @@ from typing import Any
 
 import numpy as np
 import openpyxl
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from obspy.taup import TauPyModel
 from scipy.optimize import differential_evolution, minimize
 
@@ -24,6 +26,146 @@ PHASE_SETS = {
     "p_only": {"P"},
     "with_pkikp": ALL_ACTIVE_PHASES,
 }
+PHASE_COLORS = {"P": "tab:blue", "PKiKP": "tab:red", "PKP": "tab:purple"}
+PHASE_SET_PLOT_LABELS = {
+    "p_only": "P-only",
+    "no_pkikp": "P+PKP fallback",
+    "with_pkikp": "P+PKP+PKiKP fallback",
+}
+
+
+def plot_location_prediction_summaries(
+    output: Path,
+    config: dict[str, Any],
+    model: TauPyModel,
+    pairs: dict[str, base.Pair],
+    measurement_rows: list[dict[str, str]],
+    summary_rows: list[dict[str, Any]],
+    step_km: float,
+) -> int:
+    """Add fitted-location predictions to the observed phase-shift summaries."""
+    y_limits = tuple(
+        float(value)
+        for value in config.get("phase_shift_summary_ylim_seconds", [-0.2, 0.2])
+    )
+    if len(y_limits) != 2 or y_limits[0] >= y_limits[1]:
+        raise ValueError(
+            "phase_shift_summary_ylim_seconds must contain increasing limits"
+        )
+    plot_directory = output / "phase_plots"
+    plot_directory.mkdir(parents=True, exist_ok=True)
+    plot_count = 0
+    for pair_label, pair in pairs.items():
+        candidates = {
+            str(row["phase_set"]): row
+            for row in summary_rows
+            if row["pair_label"] == pair_label and row.get("east_km") not in (None, "")
+        }
+        phase_set = next(
+            (name for name in ("p_only", "no_pkikp", "with_pkikp") if name in candidates),
+            "",
+        )
+        solution = candidates.get(phase_set)
+        if solution is None:
+            continue
+        east = float(solution["east_km"])
+        north = float(solution["north_km"])
+        depth = float(solution["depth_diff_km"])
+        dimensions = np.asarray(
+            [east, north, depth]
+            if relative_location_depth_mode(config) == "free"
+            else [east, north],
+            dtype=float,
+        )
+        plotted: list[dict[str, Any]] = []
+        for row in measurement_rows:
+            if row.get("pair_label") != pair_label:
+                continue
+            is_excluded = truthy(row.get("manual_excluded"))
+            if not (truthy(row.get("good")) or is_excluded):
+                continue
+            observed = finite_float(row.get("pair_residual_seconds"))
+            azimuth = finite_float(row.get("azimuth_degrees"))
+            distance = finite_float(row.get("epicentral_distance_degrees"))
+            if observed is None or azimuth is None or distance is None:
+                continue
+            gradient = travel_time_gradient(model, pair.event2, row, step_km)
+            if gradient is None:
+                continue
+            gradient_array = np.asarray(
+                gradient if len(dimensions) == 3 else gradient[:2], dtype=float
+            )
+            plotted.append(
+                {
+                    "phase": row["phase"],
+                    "azimuth": azimuth,
+                    "distance": distance,
+                    "observed": observed,
+                    "predicted": float(gradient_array @ dimensions),
+                    "excluded": is_excluded,
+                }
+            )
+        if not plotted:
+            continue
+        figure, (axis1, axis2) = plt.subplots(
+            2, 1, figsize=(10, 8), constrained_layout=True
+        )
+        for row in plotted:
+            color = PHASE_COLORS.get(str(row["phase"]), "0.35")
+            line_width = 0.35 if row["excluded"] else 0.9
+            line_alpha = 0.45 if row["excluded"] else 0.7
+            observed_marker = "x" if row["excluded"] else "o"
+            observed_size = 48 if row["excluded"] else 28
+            for axis, x_key in ((axis1, "azimuth"), (axis2, "distance")):
+                x_value = float(row[x_key])
+                axis.plot(
+                    [x_value, x_value],
+                    [row["observed"], row["predicted"]],
+                    color=color,
+                    linewidth=line_width,
+                    alpha=line_alpha,
+                    zorder=1,
+                )
+                axis.scatter(
+                    [x_value], [row["observed"]], marker=observed_marker,
+                    s=observed_size, color=color, alpha=0.9, zorder=3,
+                )
+                axis.scatter(
+                    [x_value], [row["predicted"]], marker="D", s=24,
+                    facecolors="white", edgecolors=color, linewidths=0.9,
+                    alpha=0.95, zorder=2,
+                )
+        phase_handles = [
+            Line2D([0], [0], marker="o", linestyle="none", color=color, label=phase)
+            for phase, color in PHASE_COLORS.items()
+            if any(row["phase"] == phase for row in plotted)
+        ]
+        meaning_handles = [
+            Line2D([0], [0], marker="D", linestyle="none", markerfacecolor="white",
+                   markeredgecolor="0.25", color="0.25", label="location prediction"),
+            Line2D([0], [0], marker="x", linestyle="-", linewidth=0.35,
+                   color="0.35", label="X: excluded; thin connector"),
+        ]
+        for axis in (axis1, axis2):
+            axis.axhline(0.0, color="0.5", linewidth=0.8, linestyle="--")
+            axis.set_ylim(*y_limits)
+            axis.set_ylabel("residual shift after pair-wide shift (s)")
+            axis.grid(True, alpha=0.25)
+            axis.legend(handles=phase_handles + meaning_handles, ncol=5, fontsize=8)
+        axis1.set_xlabel("Azimuth (deg)")
+        axis2.set_xlabel("Distance (deg)")
+        figure.suptitle(
+            f"{pair_label}: observed shifts and "
+            f"{PHASE_SET_PLOT_LABELS[phase_set]} differential-location predictions"
+        )
+        figure.savefig(
+            plot_directory / f"{pair_label}_phase_shift_summary.png",
+            dpi=180,
+            bbox_inches="tight",
+        )
+        plt.close(figure)
+        plot_count += 1
+    return plot_count
 
 
 def relative_location_depth_mode(config: dict[str, Any]) -> str:
@@ -261,11 +403,8 @@ def fit_offsets(config_path: Path, output: Path, step_km: float) -> None:
             else pair
             for label, pair in pairs.items()
         }
-    rows = [
-        row
-        for row in read_csv(output / "phase_measurements.csv")
-        if truthy(row.get("good"))
-    ]
+    measurement_rows = read_csv(output / "phase_measurements.csv")
+    rows = [row for row in measurement_rows if truthy(row.get("good"))]
     median_shifts = {
         row["pair_label"]: float(row["pair_median_shift_seconds"])
         for row in read_csv(output / "median_summary.csv")
@@ -495,6 +634,16 @@ def fit_offsets(config_path: Path, output: Path, step_km: float) -> None:
                 for row in phase_rows
             ],
         )
+    plot_count = plot_location_prediction_summaries(
+        output,
+        config,
+        model,
+        pairs,
+        measurement_rows,
+        summary_rows,
+        step_km,
+    )
+    print(f"location-prediction phase summaries {plot_count}")
 
 
 def main() -> None:

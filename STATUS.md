@@ -40,6 +40,8 @@ detailed provenance.
   P+PKP, CC >= 0.8 fallback when all 16 pairs are displayed together.
 - Generated kilometer-scaled offset figures with uncertainty circles and
   A-only waveform plot sets.
+- Added differential-location predictions to every phase-shift summary, with
+  observed-to-predicted connectors and thinner connectors for X selections.
 - Flattened active inputs and the newest run at the repository root; moved old
   runs and superseded analyses into `archive/` and `legacy/`.
 - Completed a review-only catalog-location study for 59 connected events. Its
@@ -51,10 +53,9 @@ detailed provenance.
   circles are approximate radial summaries, not covariance ellipses.
 - PKP may be more sensitive to vertical separation and phase interference than
   direct P, so it remains secondary.
-- `latest_run/` is the newest waveform measurement and A-only plotting run. The
-  preferred and sensitivity location-fit tables were produced in the archived
-  0–5 s sensitivity runs; no single final rerun yet consolidates every selected
-  product into `latest_run/`.
+- `latest_run/` now contains the newest measurements, location fits, and plots.
+  Its bootstrap uncertainty products have not yet been regenerated there; the
+  current sensitivity uncertainties remain in the archived 0–5 s runs.
 - Catalog cluster references are review proposals, not adopted locations or
   formal location uncertainties.
 
