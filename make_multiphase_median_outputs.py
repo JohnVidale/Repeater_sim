@@ -801,12 +801,23 @@ def plot_phase_waveforms(
     rows: list[dict[str, Any]],
     threshold: float,
     correlation_window: list[float],
+    *,
+    accepted_only: bool = False,
 ) -> None:
+    output_directory = output / (
+        "phase_plots_A_only" if accepted_only else "phase_plots"
+    )
+    output_directory.mkdir(parents=True, exist_ok=True)
     plotted = sorted(
         [
             row
             for row in rows
-            if row["phase"] == phase and row.get("absolute_plot_available", True)
+            if row["phase"] == phase
+            and row.get("absolute_plot_available", True)
+            and (
+                not accepted_only
+                or (bool(row.get("good")) and not bool(row.get("manual_excluded")))
+            )
         ],
         key=phase_plot_sort_key,
     )
@@ -947,10 +958,11 @@ def plot_phase_waveforms(
             f"{pair.event2.event_id} red; rows {start + 1}–{start + len(page_rows)} of {len(plotted)}\n"
             f"{alignment_text}absolute-time traces; dashed lines are accepted AIC picks"
             f"{exclusion_text}"
+            f"{'; accepted traces only' if accepted_only else ''}"
         )
         suffix = "" if len(plotted) <= MAX_TRACES_PER_PHASE_PLOT else f"_{page_number:02d}"
         figure.savefig(
-            output / "phase_plots" / f"{pair.label}_{phase}{suffix}.png",
+            output_directory / f"{pair.label}_{phase}{suffix}.png",
             dpi=180,
             bbox_inches="tight",
         )
@@ -976,14 +988,24 @@ def plot_station_waveform_comparisons(
     rows: list[dict[str, Any]],
     pair_labels: list[str],
     phase_windows: dict[str, list[float]],
+    *,
+    accepted_only: bool = False,
 ) -> int:
     """Make one all-pair waveform comparison for every station and phase."""
-    output_directory = output / "station_waveform_plots"
+    output_directory = output / (
+        "station_waveform_plots_A_only"
+        if accepted_only
+        else "station_waveform_plots"
+    )
     output_directory.mkdir(parents=True, exist_ok=True)
     pair_order = {label: index for index, label in enumerate(pair_labels)}
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for row in rows:
         if not row.get("absolute_plot_available", True):
+            continue
+        if accepted_only and (
+            not bool(row.get("good")) or bool(row.get("manual_excluded"))
+        ):
             continue
         key = str(row["station_id"]), str(row["phase"])
         grouped.setdefault(key, []).append(row)
@@ -1084,6 +1106,7 @@ def plot_station_waveform_comparisons(
                 f"rows {start + 1}–{start + len(page_rows)} of {len(plotted)}\n"
                 "event 1 blue and event 2 red; absolute-time traces; dashed lines "
                 f"are accepted AIC picks{exclusion_text}"
+                f"{'; accepted traces only' if accepted_only else ''}"
             )
             safe_station = station_id.replace(".", "_")
             suffix = (
@@ -1316,6 +1339,9 @@ def run(
         else None
     )
     threshold = float(config["selection_correlation_threshold"])
+    write_a_only_plot_versions = bool(
+        config.get("write_a_only_plot_versions", False)
+    )
     automatic_pick_min_snr = float(
         config.get("automatic_pick_min_snr", AUTOMATIC_PICK_MIN_SNR)
     )
@@ -2270,6 +2296,16 @@ def run(
                 threshold,
                 phase_windows[phase],
             )
+            if write_a_only_plot_versions:
+                plot_phase_waveforms(
+                    output,
+                    pair,
+                    phase,
+                    pair_plot_rows,
+                    threshold,
+                    phase_windows[phase],
+                    accepted_only=True,
+                )
             rows_for_phase = [row for row in pair_plot_rows if row["phase"] == phase]
             good_for_phase = [row for row in rows_for_phase if row["good"]]
             values = np.array([row["total_shift_seconds"] for row in good_for_phase], dtype=float)
@@ -2324,6 +2360,19 @@ def run(
         f"Created {station_waveform_plot_count} station-phase waveform comparison plots.",
         flush=True,
     )
+    if write_a_only_plot_versions:
+        a_only_station_plot_count = plot_station_waveform_comparisons(
+            output,
+            station_waveform_rows,
+            pair_labels,
+            phase_windows,
+            accepted_only=True,
+        )
+        print(
+            f"Created {a_only_station_plot_count} accepted-only station-phase "
+            "waveform comparison plots.",
+            flush=True,
+        )
 
     write_csv(output / "phase_measurements.csv", measurement_rows)
     write_csv(output / "phase_summary.csv", phase_summary_rows)
@@ -2400,6 +2449,7 @@ def run(
                     "one plot per measured station and phase, with available event pairs "
                     "as rows and the same absolute-time display alignment as phase plots"
                 ),
+                "a_only_plot_versions": write_a_only_plot_versions,
                 "origin_alignment_min_snr": origin_alignment_min_snr,
                 "phase_shift_summary_ylim_seconds": summary_y_limits,
                 "printed_residual_significant_digits": 3,
