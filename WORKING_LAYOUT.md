@@ -17,3 +17,8 @@ editable workbooks from the repository root.
 New workflow outputs are written beneath `outputs/`. After choosing a new run
 as authoritative, move the previous `latest_run/` into `archive/` and move the
 new run directory to `latest_run/`.
+
+Historical analysis programs and fixed inputs are under `legacy/`. The small
+root-level `compare_repeater_pwaves.py` compatibility module remains because
+the active multiphase code imports shared catalog and waveform helpers from the
+legacy P-wave implementation.

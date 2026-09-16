@@ -23,7 +23,7 @@ from obspy.taup import TauPyModel
 from scipy.optimize import least_squares
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "analysis_config.json"
 OUTPUT = (
     ROOT

@@ -20,8 +20,8 @@ import numpy as np
 from matplotlib.lines import Line2D
 
 
-ROOT = Path(__file__).resolve().parent
-DEFAULT_CONFIG = ROOT / "analysis_config.json"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CONFIG = PROJECT_ROOT / "analysis_config.json"
 
 
 def latest_station_results(root: Path) -> Path:

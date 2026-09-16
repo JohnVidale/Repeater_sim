@@ -23,7 +23,10 @@ prediction and accepts automatic picks up to 20 s from the prediction for all
 measured phases. The extra 1 s search margin preserves the separate
 near-search-edge quality check at the requested 20 s tolerance.
 
-The P-wave-only workflow documented below is a separate analysis.
+The P-wave-only workflow documented below is a separate legacy analysis. Its
+implementation and fixed inputs are stored under `legacy/p_wave_noise/`; the
+root-level `compare_repeater_pwaves.py` remains as a compatibility entry point
+because the active workflow imports several shared numerical helpers from it.
 
 `calibrate_pair_parameters.py` provides a guarded recalibration path for the
 three coupled pair parameters. Its default preview mode computes a direct-P
@@ -88,7 +91,7 @@ times with absolute value at most 0.05 s, correlations at least 0.85, and
 minimum SNR values at least 1.0 are shown in green; values outside those display
 thresholds remain red.
 
-This program implements the workflow in `PLAN.md` for the eight currently
+This program implements the workflow in `legacy/p_wave_noise/PLAN.md` for the eight currently
 supported repeating-earthquake pairs. It tests whether the residual between
 two aligned, vertical teleseismic P-wave traces is compatible with the pre-P
 noise measured on those traces. It does **not** attribute a difference to the
@@ -97,12 +100,13 @@ possible contributors.
 
 ## Files
 
-- `compare_repeater_pwaves.py` is the command-line analysis and plotting tool.
+- `compare_repeater_pwaves.py` is the compatibility entry point for the legacy
+  command-line analysis in `legacy/p_wave_noise/compare_repeater_pwaves.py`.
 - `analysis_config.json` freezes input paths and processing parameters.
 - `plot_station_pair_summaries.py` makes all-pair diagnostic plots for each
   station from a multiphase `phase_measurements.csv` file.
-- `station_selection.csv` is the auditable transcription of external station
-  selections from the right-hand panels of the source PNGs.
+- `legacy/p_wave_noise/station_selection.csv` is the auditable transcription
+  of external station selections from the right-hand panels of the source PNGs.
 - `tests/test_compare_repeater_pwaves.py` contains synthetic/unit tests for the
   numerical and data-contract behavior.
 
@@ -170,7 +174,7 @@ tabular outputs but are not printed on the plots.
 
 `station_evaluation_mode` in the JSON configuration controls the station
 population. `"selected"` analyzes only confirmed rows in
-`station_selection.csv`; `"all"` analyzes every exact `network.station` BHZ
+`legacy/p_wave_noise/station_selection.csv`; `"all"` analyzes every exact `network.station` BHZ
 intersection between the two events. Coordinate-incompatible or ambiguous
 trace pairs are recorded as exceptions. The active configuration uses `"all"`.
 P35 is included only through this all-stations path because no matching external
