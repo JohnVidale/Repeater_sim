@@ -60,11 +60,26 @@ detailed provenance.
 
 ## Next steps
 
-1. Run the complete workflow once from the new top-level working files so
-   `latest_run/` becomes one self-contained authoritative measurement, fit,
-   uncertainty, and plot package.
-2. Review whether the catalog-derived cluster references should replace any
-   active absolute locations. Do not change the working workbook until that
-   scientific choice is explicit.
-3. After the consolidated run, update only the date, commit, completed bullets,
-   and next steps here; archive superseded detail instead of appending history.
+1. Inspect the currently accepted traces and improve inclusion decisions or
+   correlation-window start times where the waveforms justify a change.
+2. Split the present exclusion meaning into:
+   - `X`: redundant or unpickable data;
+   - `B`: a measurable trace whose timing deviates from expectations.
+   Define how `B` participates in plots, diagnostics, and location fits before
+   changing the workbook or code.
+3. Review ScP and PcP waveform quality and timing precision to decide whether
+   either phase should be folded into the measurement and location workflow.
+4. Test whether PKiKP contains resolvable temporal changes that require more
+   than differential inner-core rotation to explain.
+5. Examine when timing discrepancies appear across events, stations, networks,
+   and phases, looking for explanations other than sensor clock drift.
+
+## Later maintenance
+
+- Run the complete workflow once from the top-level working files so
+  `latest_run/` becomes one self-contained authoritative measurement, fit,
+  uncertainty, and plot package.
+- Decide whether any catalog-derived cluster references should replace active
+  absolute locations before modifying the working workbook.
+- Keep this file current by editing these short lists rather than appending a
+  chronological research diary.
