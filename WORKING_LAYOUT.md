@@ -1,5 +1,7 @@
 # Working layout
 
+For the current scientific state and next steps, read `STATUS.md` first.
+
 The files used to control the active analysis are kept at the repository root:
 
 - `analysis_config.json` is the active run configuration.

@@ -16,3 +16,9 @@ compatibility module that preserves those imports and the historical command.
 Scripts for isolated investigations, currently the event-726 hypocenter test.
 They are preserved as historical methods and are not called by
 `run_repeater_workflow.py`.
+
+## `project_history/`
+
+Long-form chat summaries and superseded root documentation live here. They may
+contain obsolete paths and configuration values and should not be used to
+determine the current setup; use the root `STATUS.md` instead.
