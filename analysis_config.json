@@ -1,11 +1,11 @@
 {
-  "catalog_path": "/Users/jvidale/Documents/GitHub/Array_codes/Repeater_sim/outputs/catalog_arrival_review_20260913/adopted/ICevents_working.xlsx",
-  "waveform_root": "/Users/jvidale/Documents/GitHub/Array_codes/Repeater_sim/outputs/catalog_arrival_review_20260913/waveforms",
+  "catalog_path": "/Users/jvidale/Documents/GitHub/Array_codes/Repeater_sim/ICevents_working.xlsx",
+  "waveform_root": "/Users/jvidale/Documents/GitHub/Array_codes/Repeater_sim/archive/catalog_arrival_review_20260913/waveforms",
   "figure_root": "/Users/jvidale/Documents/Research/IC/YKA-ILAR_Rotation/rotation non-IC figures",
   "supplementary_deck": "/Users/jvidale/Documents/Research/IC/YKA-ILAR_Rotation/all_pair_waveforms.pptx",
-  "output_root": "/Users/jvidale/Documents/Research/IC/YKA-ILAR_Rotation/Output",
-  "time_shift_workbook": "/Users/jvidale/Documents/GitHub/Array_codes/Repeater_sim/outputs/catalog_arrival_review_20260913/adopted/ICevents_working.xlsx",
-  "manual_pick_alignment_workbook": "/Users/jvidale/Documents/GitHub/Array_codes/Repeater_sim/outputs/catalog_arrival_review_20260913/adopted/station_acceptance_working.xlsx",
+  "output_root": "/Users/jvidale/Documents/GitHub/Array_codes/Repeater_sim/outputs",
+  "time_shift_workbook": "/Users/jvidale/Documents/GitHub/Array_codes/Repeater_sim/ICevents_working.xlsx",
+  "manual_pick_alignment_workbook": "/Users/jvidale/Documents/GitHub/Array_codes/Repeater_sim/station_acceptance_working.xlsx",
   "taup_model": "ak135",
   "pairs_purple": [
     "P30",
@@ -87,7 +87,7 @@
   ],
   "correlation_window_seconds": [
     0.0,
-    10.0
+    5.0
   ],
   "residual_window_seconds": [
     -5.0,
@@ -125,5 +125,6 @@
   "bootstrap_iterations": 200,
   "random_seed": 20260807,
   "clipping_repeat_count": 10,
-  "large_noise_chunk_mad_multiplier": 6.0
+  "large_noise_chunk_mad_multiplier": 6.0,
+  "write_a_only_plot_versions": true
 }
