@@ -50,7 +50,6 @@ AUTOMATIC_PICK_SEARCH_SECONDS = (-6.0, 8.0)
 AUTOMATIC_PICK_MIN_SNR = 0.5
 AUTOMATIC_PICK_NOISE_WINDOW_SECONDS = (-30.0, -10.0)
 AUTOMATIC_PICK_SIGNAL_WINDOW_SECONDS = (0.0, 4.0)
-AUTOMATIC_PICK_MAX_OFFSET_SECONDS = 5.5
 ORIGIN_ALIGNMENT_MIN_SNR = 5.0
 PKIKP_MIN_DISTANCE_DEGREES = 110.0
 
@@ -587,7 +586,6 @@ def automatic_aic_pick(
     noise_window_seconds: tuple[float, float] = AUTOMATIC_PICK_NOISE_WINDOW_SECONDS,
     signal_window_seconds: tuple[float, float] = AUTOMATIC_PICK_SIGNAL_WINDOW_SECONDS,
     search_window_seconds: tuple[float, float] = AUTOMATIC_PICK_SEARCH_SECONDS,
-    maximum_absolute_offset_seconds: float = AUTOMATIC_PICK_MAX_OFFSET_SECONDS,
 ) -> tuple[float | None, float | None, bool, str]:
     """Return a relocation-style AIC pick relative to a predicted phase arrival.
 
@@ -660,8 +658,6 @@ def automatic_aic_pick(
         reasons.append(f"snr<{minimum_snr:g}")
     if edge_margin < 0.75:
         reasons.append("pick_near_search_edge")
-    if abs(pick_offset) > maximum_absolute_offset_seconds:
-        reasons.append(f"pick_offset>{maximum_absolute_offset_seconds:g}s")
     return pick_offset, snr, not reasons, ";".join(reasons)
 
 
@@ -1351,22 +1347,12 @@ def run(
             "automatic_pick_search_seconds", AUTOMATIC_PICK_SEARCH_SECONDS
         )
     )
-    automatic_pick_max_offset_seconds = float(
-        config.get(
-            "automatic_pick_max_offset_seconds",
-            AUTOMATIC_PICK_MAX_OFFSET_SECONDS,
-        )
-    )
     if (
         len(automatic_pick_search_seconds) != 2
         or automatic_pick_search_seconds[0] >= automatic_pick_search_seconds[1]
     ):
         raise base.AnalysisError(
             "automatic_pick_search_seconds must contain increasing start/end values"
-        )
-    if automatic_pick_max_offset_seconds <= 0.0:
-        raise base.AnalysisError(
-            "automatic_pick_max_offset_seconds must be positive"
         )
     origin_alignment_min_snr = float(
         config.get("origin_alignment_min_snr", ORIGIN_ALIGNMENT_MIN_SNR)
@@ -1582,7 +1568,6 @@ def run(
                         automatic_pick_min_snr,
                         automatic_pick_noise_window_seconds,
                         search_window_seconds=automatic_pick_search_seconds,
-                        maximum_absolute_offset_seconds=automatic_pick_max_offset_seconds,
                     )
                     pick2_offset, pick2_snr, pick2_accepted, pick2_reason = automatic_aic_pick(
                         path2,
@@ -1591,7 +1576,6 @@ def run(
                         automatic_pick_min_snr,
                         automatic_pick_noise_window_seconds,
                         search_window_seconds=automatic_pick_search_seconds,
-                        maximum_absolute_offset_seconds=automatic_pick_max_offset_seconds,
                     )
                     if (
                         not (pick1_accepted and pick2_accepted)
@@ -2471,7 +2455,6 @@ def run(
                     "signal_window_seconds_relative_to_aic_pick": (
                         AUTOMATIC_PICK_SIGNAL_WINDOW_SECONDS
                     ),
-                    "maximum_absolute_offset_seconds": automatic_pick_max_offset_seconds,
                     "use": (
                         "computed/picked modes may use AIC offsets for initial "
                         "window centers; workbook/none modes measure correlation "
