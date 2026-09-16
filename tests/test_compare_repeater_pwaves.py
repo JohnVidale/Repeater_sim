@@ -12,6 +12,8 @@ from obspy.taup import TauPyModel
 from openpyxl import Workbook
 
 import compare_repeater_pwaves as crp
+import fit_relative_offsets as offsets
+import make_multiphase_median_outputs as multi
 
 
 BASE_CONFIG = {
@@ -292,6 +294,89 @@ class PreprocessingTests(unittest.TestCase):
 
 
 class AlignmentTests(unittest.TestCase):
+    def test_requested_aic_snr_and_noise_window_defaults(self):
+        self.assertEqual(multi.AUTOMATIC_PICK_MIN_SNR, 0.5)
+        self.assertEqual(
+            multi.AUTOMATIC_PICK_NOISE_WINDOW_SECONDS, (-30.0, -10.0)
+        )
+
+    def test_all_phases_use_configured_correlation_window(self):
+        windows = multi.phase_correlation_windows(
+            {"correlation_window_seconds": [-5.0, 10.0]}
+        )
+        self.assertEqual(set(windows), set(multi.PHASES))
+        self.assertTrue(all(window == [-5.0, 10.0] for window in windows.values()))
+
+    def test_all_phases_use_configured_plot_window(self):
+        windows = multi.phase_plot_windows(
+            {"plot_window_seconds": [-10.0, 30.0]}
+        )
+        self.assertEqual(set(windows), set(multi.PHASES))
+        self.assertTrue(all(window == [-10.0, 30.0] for window in windows.values()))
+
+    def test_phase_shift_summary_limits_are_configurable_and_validated(self):
+        self.assertEqual(
+            multi.phase_shift_summary_y_limits(
+                {"phase_shift_summary_ylim_seconds": [-0.2, 0.2]}
+            ),
+            (-0.2, 0.2),
+        )
+        with self.assertRaises(crp.AnalysisError):
+            multi.phase_shift_summary_y_limits(
+                {"phase_shift_summary_ylim_seconds": [0.2, -0.2]}
+            )
+
+    def test_pair_exclusions_combine_global_and_pair_specific_lists(self):
+        config = {
+            "excluded_stations": ["IU.LSZ", "TRQA"],
+            "excluded_stations_by_pair": {
+                "P31": ["IU.QSPA", "OTAV"],
+                "P30": ["PMSA"],
+            },
+        }
+        self.assertEqual(
+            multi.excluded_station_codes_for_pair(config, "P31"),
+            {"LSZ", "TRQA", "QSPA", "OTAV"},
+        )
+
+    def test_pair_consistent_reference_ignores_rejected_cycle_and_requires_quorum(self):
+        rows = [
+            {"total_shift_seconds": 1.94, "good": True},
+            {"total_shift_seconds": 2.58, "good": True},
+            {"total_shift_seconds": 1.27, "good": False},
+        ]
+        self.assertAlmostEqual(
+            multi.pair_consistent_reference_shift(rows, minimum_count=2), 2.26
+        )
+        rows[2]["good"] = True
+        self.assertAlmostEqual(
+            multi.pair_consistent_reference_shift(rows, minimum_count=2), 1.94
+        )
+        self.assertTrue(
+            math.isnan(multi.pair_consistent_reference_shift(rows, minimum_count=4))
+        )
+
+    def test_picked_refinement_aligns_rejected_rows_but_preserves_aic_qc(self):
+        accepted = {
+            "automatic_pick1_accepted": True,
+            "automatic_pick2_accepted": True,
+        }
+        rejected = {
+            "automatic_pick1_accepted": True,
+            "automatic_pick2_accepted": False,
+        }
+        self.assertTrue(
+            multi.eligible_for_pair_consistent_refinement(accepted, "picked")
+        )
+        self.assertTrue(
+            multi.eligible_for_pair_consistent_refinement(rejected, "picked")
+        )
+        self.assertTrue(
+            multi.eligible_for_pair_consistent_refinement(rejected, "computed")
+        )
+        self.assertTrue(multi.passes_picked_mode_aic_qc(accepted))
+        self.assertFalse(multi.passes_picked_mode_aic_qc(rejected))
+
     def test_signed_subsample_lag_and_no_polarity_reversal(self):
         fs = 100.0
         times = np.arange(0.0, 120.0, 1.0 / fs)
@@ -338,6 +423,30 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(correlation[0], -1.0)
         self.assertAlmostEqual(correlation[-1], 8.99)
         self.assertAlmostEqual(residual[-1], 28.99)
+
+    def test_plot_window_clips_at_trace_end_without_shortening_measurement_window(self):
+        fs = 10.0
+        samples = np.sin(np.arange(200) / fs)
+        first = processed(samples, fs=fs, start=0.0)
+        second = processed(samples, fs=fs, start=0.0)
+
+        plot_time, plot1, plot2, _, _, clipped = multi.extract_normalized_plot(
+            first,
+            second,
+            arrival1=10.0,
+            arrival2=10.0,
+            lag_seconds=0.0,
+            window=[-5.0, 15.0],
+            normalization_window=[-2.0, 5.0],
+        )
+
+        self.assertTrue(clipped)
+        self.assertEqual(plot_time[0], -5.0)
+        self.assertAlmostEqual(plot_time[-1], 9.9)
+        self.assertEqual(len(plot_time), 150)
+        self.assertEqual(len(plot1), len(plot_time))
+        self.assertEqual(len(plot2), len(plot_time))
+        self.assertEqual(len(crp.window_times([-2.0, 5.0], fs)), 70)
 
 
 class NoiseAndAssessmentTests(unittest.TestCase):
@@ -410,6 +519,298 @@ class NoiseAndAssessmentTests(unittest.TestCase):
 
 
 class OutputTests(unittest.TestCase):
+    def test_workbook_mode_centers_event2_on_workbook_shift(self):
+        self.assertEqual(
+            multi.correlation_arrival_offsets("workbook", None, None, 1.25),
+            (0.0, 1.25),
+        )
+        self.assertFalse(multi.aic_offsets_required_for_correlation("workbook"))
+
+    def test_none_mode_centers_both_events_without_a_shift(self):
+        self.assertEqual(
+            multi.correlation_arrival_offsets("none", -3.0, 4.0, None),
+            (0.0, 0.0),
+        )
+        self.assertFalse(multi.aic_offsets_required_for_correlation("none"))
+        self.assertTrue(multi.aic_offsets_required_for_correlation("computed"))
+
+    def test_workbook_common_shift_positions_measurement_references(self):
+        arrival1, arrival2 = multi.measurement_phase_arrivals(
+            100.0,
+            102.0,
+            common_origin_shift_seconds=-3.0,
+            manual_shift_seconds=8.0,
+        )
+        self.assertEqual((arrival1, arrival2), (105.0, 107.0))
+
+    def test_aic_snr_is_independent_of_timing_offset_acceptance(self):
+        self.assertTrue(multi.picks_meet_minimum_snr(0.5, 1.2, 0.5))
+        self.assertFalse(multi.picks_meet_minimum_snr(0.49, 1.2, 0.5))
+        self.assertFalse(multi.picks_meet_minimum_snr(None, 1.2, 0.5))
+
+    def test_read_workbook_pick_align_shifts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pairs.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "pairs"
+            sheet.append(["label", "pick align shift"])
+            sheet.append(["P30", -2.75])
+            sheet.append(["P31", None])
+            workbook.save(path)
+            workbook.close()
+
+            self.assertEqual(
+                multi.read_workbook_pair_column(path, "pick align shift"),
+                {"P30": -2.75},
+            )
+
+    def test_read_workbook_pair_column_requires_requested_header(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pairs.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "pairs"
+            sheet.append(["label", "new time shift"])
+            workbook.save(path)
+            workbook.close()
+
+            with self.assertRaisesRegex(crp.AnalysisError, "pick align shift"):
+                multi.read_workbook_pair_column(path, "pick align shift")
+
+    def test_read_manual_pick_alignment_shifts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "station_status.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "Station status"
+            sheet.append(["Station acceptance and measurements by event pair"])
+            sheet.append([])
+            sheet.append(["Station", "Metric", "P30", "P31"])
+            sheet.append(["IU.ANMO P", "Status", "A", "R"])
+            sheet.append(
+                [None, "Manual pick alignment shift (s)", 0.125, None]
+            )
+            sheet.append(["IU.COLA PKP", "Status", "R", "A"])
+            sheet.append(
+                [None, "Manual pick alignment shift (s)", -0.2, 0.0]
+            )
+            workbook.save(path)
+            workbook.close()
+
+            self.assertEqual(
+                multi.read_manual_pick_alignment_shifts(path),
+                {
+                    ("P30", "IU.ANMO", "P"): 0.125,
+                    ("P30", "IU.COLA", "PKP"): -0.2,
+                    ("P31", "IU.COLA", "PKP"): 0.0,
+                },
+            )
+
+    def test_read_manual_pick_alignment_shifts_rejects_text_value(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "station_status.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "Station status"
+            sheet.append(["Station", "Metric", "P30"])
+            sheet.append(
+                ["IU.ANMO P", "Manual pick alignment shift (s)", "early"]
+            )
+            workbook.save(path)
+            workbook.close()
+
+            with self.assertRaisesRegex(crp.AnalysisError, "finite numeric"):
+                multi.read_manual_pick_alignment_shifts(path)
+
+    def test_read_workbook_manual_exclusions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "station_status.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "Station status"
+            sheet.append(["Station", "Metric", "P30", "P31"])
+            sheet.append(["IU.ANMO P", "Status", "X", "A"])
+            sheet.append(["IU.COLA PKP", "Status", "R", "x"])
+            workbook.save(path)
+            workbook.close()
+
+            self.assertEqual(
+                multi.read_workbook_manual_exclusions(path),
+                {("P30", "IU.ANMO", "P"), ("P31", "IU.COLA", "PKP")},
+            )
+
+    def test_none_mode_disables_pair_consistent_refinement(self):
+        self.assertFalse(multi.eligible_for_pair_consistent_refinement({}, "none"))
+
+    def test_l1_p_waveform_alignment_uses_accepted_p_measurements(self):
+        rows = [
+            {"phase": "P", "good": True, "total_shift_seconds": 1.8},
+            {"phase": "P", "good": True, "total_shift_seconds": 2.0},
+            {"phase": "P", "good": True, "total_shift_seconds": 8.0},
+            {"phase": "P", "good": False, "total_shift_seconds": -9.0},
+            {"phase": "PKP", "good": True, "total_shift_seconds": 4.0},
+        ]
+        self.assertEqual(multi.l1_p_waveform_alignment_shift(rows, 2), 2.0)
+        self.assertTrue(math.isnan(multi.l1_p_waveform_alignment_shift(rows, 4)))
+
+    def test_common_origin_shift_uses_high_snr_post_alignment_onsets(self):
+        rows = [
+            {
+                "phase": "P",
+                "automatic_pick1_accepted": True,
+                "automatic_pick1_offset_s": -3.0,
+                "automatic_pick1_snr": 8.0,
+                "automatic_pick2_accepted": True,
+                "automatic_pick2_offset_s": -1.0,
+                "automatic_pick2_snr": 9.0,
+            },
+            {
+                "phase": "P",
+                "automatic_pick1_accepted": True,
+                "automatic_pick1_offset_s": 7.0,
+                "automatic_pick1_snr": 1.0,
+                "automatic_pick2_accepted": True,
+                "automatic_pick2_offset_s": 4.0,
+                "automatic_pick2_snr": 8.0,
+            },
+        ]
+        shift, count = multi.l1_common_high_snr_p_origin_shift(
+            rows, waveform_alignment_shift_seconds=2.0, minimum_snr=5.0
+        )
+        self.assertEqual(shift, -3.0)
+        self.assertEqual(count, 3)
+
+    def test_common_origin_shift_ignores_manually_excluded_rows(self):
+        rows = [
+            {
+                "phase": "P",
+                "manual_excluded": False,
+                "automatic_pick1_accepted": True,
+                "automatic_pick1_offset_s": 0.1,
+                "automatic_pick1_snr": 8.0,
+                "automatic_pick2_accepted": False,
+            },
+            {
+                "phase": "P",
+                "manual_excluded": True,
+                "automatic_pick1_accepted": True,
+                "automatic_pick1_offset_s": 9.0,
+                "automatic_pick1_snr": 8.0,
+                "automatic_pick2_accepted": False,
+            },
+        ]
+        shift, count = multi.l1_common_high_snr_p_origin_shift(
+            rows, waveform_alignment_shift_seconds=0.0, minimum_snr=5.0
+        )
+        self.assertEqual(shift, 0.1)
+        self.assertEqual(count, 1)
+
+    def test_absolute_plot_pick_times_apply_alignment_then_common_shift(self):
+        row = {
+            "automatic_pick1_accepted": True,
+            "automatic_pick1_offset_s": 0.2,
+            "automatic_pick2_accepted": True,
+            "automatic_pick2_offset_s": 2.1,
+        }
+        pick1, pick2 = multi.absolute_plot_pick_times(row, 1.9, -0.1)
+        self.assertAlmostEqual(pick1, 0.3)
+        self.assertAlmostEqual(pick2, 0.3)
+
+    def test_absolute_plot_does_not_apply_workbook_common_shift_twice(self):
+        row = {
+            "automatic_pick1_accepted": True,
+            "automatic_pick1_offset_s": 0.2,
+            "automatic_pick2_accepted": True,
+            "automatic_pick2_offset_s": 2.1,
+            "aic_reference_includes_common_origin_shift": True,
+        }
+        pick1, pick2 = multi.absolute_plot_pick_times(row, 1.9, -3.0)
+        self.assertAlmostEqual(pick1, 0.2)
+        self.assertAlmostEqual(pick2, 0.2)
+
+    def test_manual_station_phase_shift_moves_both_measurement_references(self):
+        arrival1, arrival2 = multi.manually_shifted_phase_arrivals(
+            100.0, 102.0, 8.0
+        )
+        self.assertEqual((arrival1, arrival2), (108.0, 110.0))
+
+    def test_pkikp_below_110_degrees_is_ignored(self):
+        self.assertFalse(multi.phase_is_usable_for_shift("PKiKP", 109.999))
+        self.assertTrue(multi.phase_is_usable_for_shift("PKiKP", 110.0))
+        self.assertTrue(multi.phase_is_usable_for_shift("P", 30.0))
+
+    def test_pdiff_is_excluded_from_active_phases_and_preferred_fit(self):
+        self.assertFalse(multi.phase_is_usable_for_shift("Pdiff", 99.999))
+        self.assertFalse(multi.phase_is_usable_for_shift("Pdiff", 100.0))
+        self.assertFalse(multi.phase_is_usable_for_shift("Pdiff", 109.999))
+        self.assertFalse(multi.phase_is_usable_for_shift("Pdiff", 110.0))
+        self.assertEqual(offsets.NO_PKIKP_PHASES, {"P", "PKP"})
+        self.assertEqual(offsets.ALL_ACTIVE_PHASES, {"P", "PKP", "PKiKP"})
+
+    def test_phase_plot_sort_key_orders_by_increasing_distance(self):
+        rows = [
+            {"station_id": "ZZ.Z", "epicentral_distance_degrees": 80.0},
+            {"station_id": "BB.B", "epicentral_distance_degrees": 30.0},
+            {"station_id": "AA.A", "epicentral_distance_degrees": 30.0},
+        ]
+        ordered = sorted(rows, key=multi.phase_plot_sort_key)
+        self.assertEqual([row["station_id"] for row in ordered], ["AA.A", "BB.B", "ZZ.Z"])
+
+    def test_waveform_plot_uses_compact_acceptance_labels(self):
+        self.assertEqual(multi.acceptance_label({"good": True}), "Acc")
+        self.assertEqual(multi.acceptance_label({"good": False}), "Rej")
+        self.assertEqual(
+            multi.acceptance_label({"good": False, "manual_excluded": True}), "X"
+        )
+
+    def test_excluded_event1_trace_is_black(self):
+        self.assertEqual(multi.event1_trace_color({"manual_excluded": True}), "black")
+        self.assertEqual(
+            multi.event1_trace_color({"manual_excluded": False}), "tab:blue"
+        )
+
+    def test_shift_summary_skips_rows_without_pair_residuals(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            multi.plot_shift_summary(
+                Path(temporary),
+                "P145",
+                [{"phase": "P", "good": True}],
+                math.nan,
+                (-0.2, 0.2),
+            )
+            self.assertFalse(
+                (Path(temporary) / "phase_plots" / "P145_phase_shift_summary.png").exists()
+            )
+
+    def test_phase_trace_information_includes_geometry_to_one_decimal(self):
+        row = {
+            "station_id": "GT.VNDA",
+            "epicentral_distance_degrees": 58.123,
+            "azimuth_degrees": 182.612,
+            "cc": 0.72,
+            "display_alignment_cc": 0.9829,
+            "display_alignment_shift_seconds": 2.5827,
+            "good": False,
+        }
+        self.assertEqual(
+            multi.phase_trace_information(row),
+            "GT.VNDA  dist=58.1\N{DEGREE SIGN}  az=182.6\N{DEGREE SIGN}  "
+            "CC=0.98  resid=+2.58s  Rej",
+        )
+
+    def test_residual_format_uses_three_significant_digits(self):
+        self.assertEqual(multi.format_residual_seconds(0.1), "+0.100")
+        self.assertEqual(multi.format_residual_seconds(-0.01234), "-0.0123")
+
+    def test_display_only_alignment_uses_its_best_cycle_shift(self):
+        row = {
+            "display_alignment_shift_seconds": 2.58,
+            "fine_search_center_seconds": 1.94,
+            "residual_lag_seconds": -0.13,
+        }
+        self.assertEqual(multi.display_shift(row), 2.58)
+
     def test_station_trace_label_uses_two_lines_and_compact_shift(self):
         label = crp.station_trace_label(
             {
@@ -467,6 +868,22 @@ class OutputTests(unittest.TestCase):
     def test_plot_time_axis_limits_restore_configured_half_open_end(self):
         relative = crp.window_times([-10.0, 80.0], 100.0)
         self.assertEqual(crp.plot_time_axis_limits(relative), (-10.0, 80.0))
+
+    def test_station_pair_trace_information_identifies_pair_and_events(self):
+        row = {
+            "pair_label": "P30",
+            "event1": 723,
+            "event2": 739,
+            "epicentral_distance_degrees": 150.788,
+            "cc": 0.9872,
+            "pair_residual_seconds": 0.004419,
+            "good": True,
+        }
+        label = multi.station_pair_trace_information(row)
+        self.assertIn("P30", label)
+        self.assertIn("723–739", label)
+        self.assertIn("dist=150.8°", label)
+        self.assertIn("Acc", label)
 
     def test_strict_json_accepts_unknown_distance_as_null(self):
         with tempfile.TemporaryDirectory() as directory:

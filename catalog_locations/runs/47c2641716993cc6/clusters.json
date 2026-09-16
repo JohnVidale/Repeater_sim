@@ -1,0 +1,438 @@
+[
+  {
+    "cluster_id": "C701",
+    "ehb_only_sensitivity_reference": {
+      "depth_km": 55.6,
+      "epicentral_medoid_event_id": 753,
+      "latitude": -56.304,
+      "longitude": -26.935
+    },
+    "fallback_influence": {
+      "depth_change_km": 0.0,
+      "east_km": 0.0,
+      "horizontal_km": 0.0,
+      "north_km": 0.0
+    },
+    "fallback_members": [],
+    "max_horizontal_scatter_km": 10.702411984345712,
+    "median_horizontal_scatter_km": 6.941818110320946,
+    "members": [
+      701,
+      726,
+      753
+    ],
+    "reference": {
+      "depth_km": 55.6,
+      "epicentral_medoid_event_id": 753,
+      "latitude": -56.304,
+      "longitude": -26.935
+    },
+    "status": "proposed_review_only"
+  },
+  {
+    "cluster_id": "C702",
+    "ehb_only_sensitivity_reference": {
+      "depth_km": 42.3,
+      "epicentral_medoid_event_id": 708,
+      "latitude": -56.217,
+      "longitude": -26.924
+    },
+    "fallback_influence": {
+      "depth_change_km": 4.900000000000006,
+      "east_km": -6.739880090884483,
+      "horizontal_km": 6.744952681384824,
+      "north_km": 0.26153973812652936
+    },
+    "fallback_members": [
+      862
+    ],
+    "max_horizontal_scatter_km": 11.472453435800631,
+    "median_horizontal_scatter_km": 6.953784809395275,
+    "members": [
+      702,
+      708,
+      723,
+      739,
+      757,
+      862
+    ],
+    "reference": {
+      "depth_km": 47.2,
+      "epicentral_medoid_event_id": 862,
+      "latitude": -56.2146,
+      "longitude": -27.033
+    },
+    "status": "proposed_review_only"
+  },
+  {
+    "cluster_id": "C705",
+    "ehb_only_sensitivity_reference": {
+      "depth_km": 53.3,
+      "epicentral_medoid_event_id": 829,
+      "latitude": -58.014,
+      "longitude": -25.608
+    },
+    "fallback_influence": {
+      "depth_change_km": -5.099999999999994,
+      "east_km": 0.29460561898248494,
+      "horizontal_km": 1.3664659456257673,
+      "north_km": 1.3343300602995007
+    },
+    "fallback_members": [
+      904
+    ],
+    "max_horizontal_scatter_km": 10.343273350387225,
+    "median_horizontal_scatter_km": 6.575299206613131,
+    "members": [
+      705,
+      711,
+      729,
+      829,
+      843,
+      904
+    ],
+    "reference": {
+      "depth_km": 48.2,
+      "epicentral_medoid_event_id": 843,
+      "latitude": -58.002,
+      "longitude": -25.603
+    },
+    "status": "proposed_review_only"
+  },
+  {
+    "cluster_id": "C712",
+    "ehb_only_sensitivity_reference": {
+      "depth_km": 44.7,
+      "epicentral_medoid_event_id": 734,
+      "latitude": -59.09,
+      "longitude": -25.737
+    },
+    "fallback_influence": {
+      "depth_change_km": -3.3064999999999998,
+      "east_km": 0.0,
+      "horizontal_km": 0.0,
+      "north_km": 0.0
+    },
+    "fallback_members": [
+      854,
+      859,
+      916
+    ],
+    "max_horizontal_scatter_km": 12.867989640643753,
+    "median_horizontal_scatter_km": 3.8143998719252963,
+    "members": [
+      712,
+      718,
+      734,
+      742,
+      848,
+      854,
+      859,
+      916
+    ],
+    "reference": {
+      "depth_km": 41.3935,
+      "epicentral_medoid_event_id": 734,
+      "latitude": -59.09,
+      "longitude": -25.737
+    },
+    "status": "proposed_review_only"
+  },
+  {
+    "cluster_id": "C715",
+    "ehb_only_sensitivity_reference": {
+      "depth_km": 71.7,
+      "epicentral_medoid_event_id": 802,
+      "latitude": -56.369,
+      "longitude": -26.745
+    },
+    "fallback_influence": {
+      "depth_change_km": 6.799999999999997,
+      "east_km": -3.5743382006025555,
+      "horizontal_km": 4.596246809511017,
+      "north_km": 2.8895659123220376
+    },
+    "fallback_members": [
+      860
+    ],
+    "max_horizontal_scatter_km": 5.69858704565211,
+    "median_horizontal_scatter_km": 4.236644392762731,
+    "members": [
+      715,
+      758,
+      802,
+      830,
+      860
+    ],
+    "reference": {
+      "depth_km": 78.5,
+      "epicentral_medoid_event_id": 758,
+      "latitude": -56.343,
+      "longitude": -26.803
+    },
+    "status": "proposed_review_only"
+  },
+  {
+    "cluster_id": "C716",
+    "ehb_only_sensitivity_reference": {
+      "depth_km": 34.6,
+      "epicentral_medoid_event_id": 716,
+      "latitude": -58.711,
+      "longitude": -25.351
+    },
+    "fallback_influence": {
+      "depth_change_km": 0.000499999999995282,
+      "east_km": 4.1555912198059195,
+      "horizontal_km": 4.714298115335881,
+      "north_km": -2.2261330450203074
+    },
+    "fallback_members": [
+      852,
+      858
+    ],
+    "max_horizontal_scatter_km": 5.7445108769330115,
+    "median_horizontal_scatter_km": 3.990039118809893,
+    "members": [
+      716,
+      737,
+      852,
+      858
+    ],
+    "reference": {
+      "depth_km": 34.6005,
+      "epicentral_medoid_event_id": 737,
+      "latitude": -58.731,
+      "longitude": -25.279
+    },
+    "status": "proposed_review_only"
+  },
+  {
+    "cluster_id": "C719",
+    "ehb_only_sensitivity_reference": {
+      "depth_km": 48.5,
+      "epicentral_medoid_event_id": 822,
+      "latitude": -57.454,
+      "longitude": -25.872
+    },
+    "fallback_influence": {
+      "depth_change_km": 2.644999999999996,
+      "east_km": -3.4706657379690014,
+      "horizontal_km": 6.697451110073854,
+      "north_km": -5.728030264158665
+    },
+    "fallback_members": [
+      857,
+      909
+    ],
+    "max_horizontal_scatter_km": 14.059268535121173,
+    "median_horizontal_scatter_km": 7.886078232375617,
+    "members": [
+      719,
+      754,
+      811,
+      822,
+      857,
+      909
+    ],
+    "reference": {
+      "depth_km": 51.144999999999996,
+      "epicentral_medoid_event_id": 909,
+      "latitude": -57.5055,
+      "longitude": -25.9301
+    },
+    "status": "proposed_review_only"
+  },
+  {
+    "cluster_id": "C720",
+    "ehb_only_sensitivity_reference": {
+      "depth_km": 32.4,
+      "epicentral_medoid_event_id": 736,
+      "latitude": -59.023,
+      "longitude": -25.689
+    },
+    "fallback_influence": {
+      "depth_change_km": 10.014500000000005,
+      "east_km": 0.0,
+      "horizontal_km": 0.0,
+      "north_km": 0.0
+    },
+    "fallback_members": [
+      905
+    ],
+    "max_horizontal_scatter_km": 6.316571931405231,
+    "median_horizontal_scatter_km": 4.999013593266286,
+    "members": [
+      720,
+      736,
+      845,
+      905
+    ],
+    "reference": {
+      "depth_km": 42.414500000000004,
+      "epicentral_medoid_event_id": 736,
+      "latitude": -59.023,
+      "longitude": -25.689
+    },
+    "status": "proposed_review_only"
+  },
+  {
+    "cluster_id": "C725",
+    "ehb_only_sensitivity_reference": {
+      "depth_km": 23.05,
+      "epicentral_medoid_event_id": 725,
+      "latitude": -55.325,
+      "longitude": -28.134
+    },
+    "fallback_influence": {
+      "depth_change_km": 0.0,
+      "east_km": 0.0,
+      "horizontal_km": 0.0,
+      "north_km": 0.0
+    },
+    "fallback_members": [],
+    "max_horizontal_scatter_km": 18.997069638444685,
+    "median_horizontal_scatter_km": 9.498534819222343,
+    "members": [
+      725,
+      749
+    ],
+    "reference": {
+      "depth_km": 23.05,
+      "epicentral_medoid_event_id": 725,
+      "latitude": -55.325,
+      "longitude": -28.134
+    },
+    "status": "proposed_review_only"
+  },
+  {
+    "cluster_id": "C727",
+    "ehb_only_sensitivity_reference": {
+      "depth_km": 63.4,
+      "epicentral_medoid_event_id": 801,
+      "latitude": -55.977,
+      "longitude": -27.154
+    },
+    "fallback_influence": {
+      "depth_change_km": -3.4345,
+      "east_km": -8.568867594539466,
+      "horizontal_km": 10.135188485362432,
+      "north_km": -5.4126291006381235
+    },
+    "fallback_members": [
+      919
+    ],
+    "max_horizontal_scatter_km": 12.351291167443376,
+    "median_horizontal_scatter_km": 7.4863802306347065,
+    "members": [
+      727,
+      752,
+      801,
+      919
+    ],
+    "reference": {
+      "depth_km": 59.9655,
+      "epicentral_medoid_event_id": 919,
+      "latitude": -56.0256,
+      "longitude": -27.2919
+    },
+    "status": "proposed_review_only"
+  },
+  {
+    "cluster_id": "C731",
+    "ehb_only_sensitivity_reference": {
+      "depth_km": 25.200000000000003,
+      "epicentral_medoid_event_id": 731,
+      "latitude": -59.681,
+      "longitude": -26.268
+    },
+    "fallback_influence": {
+      "depth_change_km": 0.0,
+      "east_km": 0.0,
+      "horizontal_km": 0.0,
+      "north_km": 0.0
+    },
+    "fallback_members": [],
+    "max_horizontal_scatter_km": 9.912311016741425,
+    "median_horizontal_scatter_km": 4.9561555083707125,
+    "members": [
+      731,
+      747
+    ],
+    "reference": {
+      "depth_km": 25.200000000000003,
+      "epicentral_medoid_event_id": 731,
+      "latitude": -59.681,
+      "longitude": -26.268
+    },
+    "status": "proposed_review_only"
+  },
+  {
+    "cluster_id": "C732",
+    "ehb_only_sensitivity_reference": {
+      "depth_km": 51.6,
+      "epicentral_medoid_event_id": 732,
+      "latitude": -59.647,
+      "longitude": -26.396
+    },
+    "fallback_influence": {
+      "depth_change_km": 0.0,
+      "east_km": 0.0,
+      "horizontal_km": 0.0,
+      "north_km": 0.0
+    },
+    "fallback_members": [],
+    "max_horizontal_scatter_km": 3.6603762181155948,
+    "median_horizontal_scatter_km": 1.8301881090577974,
+    "members": [
+      732,
+      750
+    ],
+    "reference": {
+      "depth_km": 51.6,
+      "epicentral_medoid_event_id": 732,
+      "latitude": -59.647,
+      "longitude": -26.396
+    },
+    "status": "proposed_review_only"
+  },
+  {
+    "cluster_id": "C733",
+    "ehb_only_sensitivity_reference": {
+      "depth_km": 20.45,
+      "epicentral_medoid_event_id": 733,
+      "latitude": -58.643,
+      "longitude": -25.313
+    },
+    "fallback_influence": {
+      "depth_change_km": 11.135000000000002,
+      "east_km": 1.5341668761979845,
+      "horizontal_km": 12.636584128902209,
+      "north_km": -12.543109281306613
+    },
+    "fallback_members": [
+      853,
+      861,
+      906,
+      911,
+      917
+    ],
+    "max_horizontal_scatter_km": 13.073226122609357,
+    "median_horizontal_scatter_km": 3.7779062199789495,
+    "members": [
+      733,
+      745,
+      853,
+      861,
+      906,
+      911,
+      917
+    ],
+    "reference": {
+      "depth_km": 31.585,
+      "epicentral_medoid_event_id": 906,
+      "latitude": -58.7558,
+      "longitude": -25.2864
+    },
+    "status": "proposed_review_only"
+  }
+]

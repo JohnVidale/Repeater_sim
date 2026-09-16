@@ -16,13 +16,11 @@ import compare_repeater_pwaves as base
 
 
 EARTH_KM_PER_DEGREE = 111.195
-NO_PKIKP_PHASES = {"P", "PKP"}
-ALL_ACTIVE_PHASES = {"P", "PKP", "PKiKP"}
+NO_PKIKP_PHASES = {"P", "Pdiff", "PKP"}
 PREFERRED_PHASE_SET = "no_pkikp"
 PHASE_SETS = {
     "no_pkikp": NO_PKIKP_PHASES,
     "p_only": {"P"},
-    "with_pkikp": ALL_ACTIVE_PHASES,
 }
 
 
@@ -456,7 +454,7 @@ def fit_offsets(config_path: Path, output: Path, step_km: float) -> None:
             for row in preferred_rows
         ],
     )
-    for phase_set in PHASE_SETS:
+    for phase_set in ("no_pkikp", "p_only"):
         phase_rows = [row for row in summary_rows if row["phase_set"] == phase_set]
         write_csv(
             output / f"median_absolute_relative_locations_{phase_set}.csv",

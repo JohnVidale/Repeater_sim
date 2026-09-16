@@ -1,0 +1,7 @@
+{
+  "python": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:11:29) [Clang 20.1.8 ]",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "matplotlib": "3.10.9",
+  "openpyxl": "3.1.5",
+  "environment": "vidale_main"
+}

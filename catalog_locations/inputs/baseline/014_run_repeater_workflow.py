@@ -247,7 +247,7 @@ def write_workflow_summary(
             "optional write pair new_lat/new_lon to workbook",
             "optional missing-pairs-only computed preflight for blank workbook new time shift values",
             "make pair-oriented phase plots, station-oriented all-pair waveform plots, and measurement tables",
-            "fit relative offsets with preferred P+PKP (no_pkikp) and diagnostic p_only phase sets",
+            "fit relative offsets with preferred P+Pdiff+PKP (no_pkikp) and diagnostic p_only phase sets",
             "bootstrap preferred no_pkikp uncertainties",
             "write compact centroid/delta columns to ICevents_full.xlsx",
             "run unit tests",

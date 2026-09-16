@@ -1,0 +1,18 @@
+[
+  {
+    "file": "inputs/workbook_tables.json",
+    "sha256": "a3011035a666664cb9c50502b5c3f57fd4a3d4d4d8f4bf96807e711d0be1b420"
+  },
+  {
+    "file": "inputs/study_pairs.json",
+    "sha256": "5f2f4939edc9b43c0a985684c4cfffcf129474f5dfce5dbe929e7d236c1e091d"
+  },
+  {
+    "file": "inputs/study_events.json",
+    "sha256": "5700dff566942d4ae7f9349e90213261d48110160a4fb0e7e11a15f4bc32d879"
+  },
+  {
+    "file": "inputs/excluded_pairs.json",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+  }
+]

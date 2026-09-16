@@ -1,36 +1,114 @@
 {
-  "catalog_path": "/Users/jvidale/Documents/GitHub/Array_codes/Files/ICevents_full.xlsx",
-  "waveform_root": "/Users/jvidale/Documents/Research/IC/Mseed/IC non-IC SAC files",
+  "catalog_path": "/Users/jvidale/Documents/GitHub/Array_codes/Repeater_sim/outputs/catalog_arrival_review_20260913/adopted/ICevents_working.xlsx",
+  "waveform_root": "/Users/jvidale/Documents/GitHub/Array_codes/Repeater_sim/outputs/catalog_arrival_review_20260913/waveforms",
   "figure_root": "/Users/jvidale/Documents/Research/IC/YKA-ILAR_Rotation/rotation non-IC figures",
   "supplementary_deck": "/Users/jvidale/Documents/Research/IC/YKA-ILAR_Rotation/all_pair_waveforms.pptx",
   "output_root": "/Users/jvidale/Documents/Research/IC/YKA-ILAR_Rotation/Output",
-  "time_shift_workbook": "/Users/jvidale/Documents/GitHub/Array_codes/Files/ICevents_full.xlsx",
+  "time_shift_workbook": "/Users/jvidale/Documents/GitHub/Array_codes/Repeater_sim/outputs/catalog_arrival_review_20260913/adopted/ICevents_working.xlsx",
+  "manual_pick_alignment_workbook": "/Users/jvidale/Documents/GitHub/Array_codes/Repeater_sim/outputs/catalog_arrival_review_20260913/adopted/station_acceptance_working.xlsx",
   "taup_model": "ak135",
-
-  "pairs_purple": ["P30", "P31", "P33", "P34", "P35", "P37", "P38", "P39", "P355"],
-  "pairs_blue": ["P51", "P79", "P109", "P112", "P123", "P140", "P145", "P321"],
-  "pairs_all": ["P30", "P31", "P33", "P34", "P35", "P37", "P38", "P39", "P51", "P79", "P109", "P112", "P123", "P140", "P145", "P321", "P355"],
-  "pairs": ["P30", "P31", "P33", "P34", "P35", "P37", "P38", "P39", "P51", "P79", "P112", "P123", "P140", "P145", "P321", "P355"],
-
+  "pairs_purple": [
+    "P30",
+    "P31",
+    "P33",
+    "P34",
+    "P35",
+    "P37",
+    "P38",
+    "P39",
+    "P355"
+  ],
+  "pairs_blue": [
+    "P51",
+    "P79",
+    "P109",
+    "P112",
+    "P123",
+    "P140",
+    "P145",
+    "P321"
+  ],
+  "pairs_all": [
+    "P30",
+    "P31",
+    "P33",
+    "P34",
+    "P35",
+    "P37",
+    "P38",
+    "P39",
+    "P51",
+    "P79",
+    "P109",
+    "P112",
+    "P123",
+    "P140",
+    "P145",
+    "P321",
+    "P355"
+  ],
+  "pairs": [
+    "P30",
+    "P31",
+    "P33",
+    "P34",
+    "P35",
+    "P37",
+    "P38",
+    "P39",
+    "P51",
+    "P79",
+    "P112",
+    "P123",
+    "P140",
+    "P145",
+    "P321",
+    "P355"
+  ],
   "station_evaluation_mode": "all",
-  "excluded_stations_all": ["LPAZ", "VNDA", "CHTO", "KEV", "OTAV", "PMSA", "QSPA", "TRQA", "SJG"],
-  "excluded_stations": ["CHTO", "KEV", "OTAV", "PMSA", "QSPA", "TRQA", "SJG"],
-
-  "bandpass_hz": [0.8, 2.0],
-  "selection_correlation_threshold": 0.80,
-  "correlation_window_seconds": [-5.0, 10.0],
-  "residual_window_seconds": [-5.0, 10.0],
-  "plot_window_seconds": [-10.0, 80.0],
+  "excluded_stations_all": [],
+  "excluded_stations": [],
+  "excluded_stations_by_pair": {},
+  "bandpass_hz": [
+    0.8,
+    2.0
+  ],
+  "selection_correlation_threshold": 0.875,
+  "automatic_pick_min_snr": 0.5,
+  "automatic_pick_search_seconds": [
+    -5.0,
+    5.0
+  ],
+  "automatic_pick_max_offset_seconds": 20.0,
+  "origin_alignment_min_snr": 5.0,
+  "automatic_pick_noise_window_seconds": [
+    -30.0,
+    -10.0
+  ],
+  "correlation_window_seconds": [
+    0.0,
+    10.0
+  ],
+  "residual_window_seconds": [
+    -5.0,
+    10.0
+  ],
+  "plot_window_seconds": [
+    -10.0,
+    30.0
+  ],
   "lag_search_seconds": 10.0,
   "residual_lag_search_seconds": 0.5,
-
-  "time_shift_source": "picked",
-  "update_workbook_time_shifts_from_computed": true,
+  "phase_shift_summary_ylim_seconds": [
+    -0.2,
+    0.2
+  ],
+  "time_shift_source": "workbook",
+  "common_time_shift_source": "workbook",
+  "update_workbook_time_shifts_from_computed": false,
   "do_centroid_relocation": false,
-  "centroid_location_mode": "fixed_depth",
+  "centroid_location_mode": "catalog_fixed",
   "relative_location_depth_mode": "fixed_common",
-  "skip_with_pkikp_bootstrap": true,
-
   "phase": "P",
   "filter_order": 4,
   "start_taper_seconds": 5.0,

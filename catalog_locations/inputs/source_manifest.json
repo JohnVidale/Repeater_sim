@@ -1,0 +1,583 @@
+[
+  {
+    "file": "inputs/raw/format2.hdf",
+    "url": "https://download.isc.ac.uk/isc-ehb/format2.hdf",
+    "retrieved_utc": "2026-09-13T19:06:45.468985+00:00",
+    "sha256": "2f3ffd478195b7d8102b6aa3d356e76e9b106da46289eb1ed84b1fcf1ff12b0e",
+    "bytes": 4598
+  },
+  {
+    "file": "inputs/raw/1991.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/1991.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:06:46.413364+00:00",
+    "sha256": "2efa827aae90d74b72a73ffce7bab79804d34b6d04d9f45f8d62a233155f6c79",
+    "bytes": 112242
+  },
+  {
+    "file": "inputs/raw/1992.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/1992.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:06:48.638079+00:00",
+    "sha256": "ee8767816ad0feffea758d6faa08cd1e1112430c3db805328c538abc25a7a663",
+    "bytes": 125259
+  },
+  {
+    "file": "inputs/raw/1995.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/1995.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:06:49.851184+00:00",
+    "sha256": "12b3947018a208aad33d3337e4235f2af191e91a6bc6a4cb74d8987df3f3a972",
+    "bytes": 232493
+  },
+  {
+    "file": "inputs/raw/1997.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/1997.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:06:51.014936+00:00",
+    "sha256": "a2e1fdb02e966dce50e5a6cdaffa90a64d400211746a17e9c6dba847d0b90efe",
+    "bytes": 221717
+  },
+  {
+    "file": "inputs/raw/1998.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/1998.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:06:52.034791+00:00",
+    "sha256": "fa3628cb6d897ac1109b5d65ae6dd0fdb7593d5bdc9a7c0a516520d6e3290b47",
+    "bytes": 206228
+  },
+  {
+    "file": "inputs/raw/1999.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/1999.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:06:53.123782+00:00",
+    "sha256": "a7ce22c410c655ec8b60ef741d9f843772d8043c1f15745cc02cd8d3ad63c20f",
+    "bytes": 204532
+  },
+  {
+    "file": "inputs/raw/2002.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2002.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:06:54.182312+00:00",
+    "sha256": "bafa332fea5f88c1ee76fee971e307b3728c85d5effb64f0cd596fce3bdca299",
+    "bytes": 204406
+  },
+  {
+    "file": "inputs/raw/2003.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2003.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:06:55.330126+00:00",
+    "sha256": "0f6d0c0c9922e54a36268be71e9102cea68430f263d60f55ec7c24bbcfe77530",
+    "bytes": 206719
+  },
+  {
+    "file": "inputs/raw/2004.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2004.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:06:56.413953+00:00",
+    "sha256": "cbae0e7c3001c668d5e924c6c96cddb6e41916f4df93fe3bf3d78acbb12d045c",
+    "bytes": 241066
+  },
+  {
+    "file": "inputs/raw/2005.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2005.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:06:57.581782+00:00",
+    "sha256": "6d1356e0597281ea7e825c3f0a52defc122580ebb9a4965ceb1a5c7ec63f8722",
+    "bytes": 275744
+  },
+  {
+    "file": "inputs/raw/2006.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2006.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:06:58.730381+00:00",
+    "sha256": "32c95572cd4c81ff35b0962d25b3ba485d25574d5565f36a25fc4ceea8b389f4",
+    "bytes": 267582
+  },
+  {
+    "file": "inputs/raw/2007.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2007.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:06:59.718721+00:00",
+    "sha256": "4064f36057be29c7696367540ac4aaf34b5789d557faa93cfcad98a5660f65ce",
+    "bytes": 281628
+  },
+  {
+    "file": "inputs/raw/2008.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2008.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:07:00.826313+00:00",
+    "sha256": "367065e23c0415d578b4c7ab7121ba9614c7bdc07fe506605834ac10e41c58ea",
+    "bytes": 268014
+  },
+  {
+    "file": "inputs/raw/2009.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2009.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:07:02.013747+00:00",
+    "sha256": "08fc31d13f8198f1fa773badbab49e8147383a0b7098a5295641f51c6e5e691b",
+    "bytes": 265918
+  },
+  {
+    "file": "inputs/raw/2010.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2010.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:07:05.632259+00:00",
+    "sha256": "e5fdcbee9f9543a47addce768b5f8afd7315a22f1e4ce8ddf0ffdd8c20152790",
+    "bytes": 288236
+  },
+  {
+    "file": "inputs/raw/2011.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2011.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:07:07.069142+00:00",
+    "sha256": "230e309d4da1a88e1d93ccaf66e891c1e48c47ea58b6ae0d5c7a6252625e8135",
+    "bytes": 379607
+  },
+  {
+    "file": "inputs/raw/2013.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2013.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:07:08.098167+00:00",
+    "sha256": "dd79186b072eb0ee177167f8ce2b2b9078b118a07b2376e01b5b24d5f9aa8722",
+    "bytes": 317404
+  },
+  {
+    "file": "inputs/raw/2014.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2014.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:07:09.140808+00:00",
+    "sha256": "dcbb3489abff3b75cb37d974277209db7cbe1dfd4d8435c77b027c25990f1480",
+    "bytes": 338187
+  },
+  {
+    "file": "inputs/raw/2015.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2015.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:07:10.258251+00:00",
+    "sha256": "024f5f2ee8a6c2fabb3355a9da0a39976fd304ce938fdfa146f9d4ead02b0235",
+    "bytes": 334438
+  },
+  {
+    "file": "inputs/raw/2016.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2016.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:07:11.249662+00:00",
+    "sha256": "8e92687532bd2f6ebad049958b3431019150451e3314dcb9c08884cd9ae66329",
+    "bytes": 336544
+  },
+  {
+    "file": "inputs/raw/2017.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2017.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:07:12.405750+00:00",
+    "sha256": "b705e51633b5a486bc8231c2eba33028573d827f8a2330e872058d16991cda6b",
+    "bytes": 375631
+  },
+  {
+    "file": "inputs/raw/2018.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2018.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:07:13.626193+00:00",
+    "sha256": "784c8511d355fd3e38fb0a86307b9a5790cce63b9c10b870cbd4218349f3ac66",
+    "bytes": 426054
+  },
+  {
+    "file": "inputs/raw/2020.hdf.gz",
+    "url": "https://download.isc.ac.uk/isc-ehb/2020.hdf.gz",
+    "retrieved_utc": "2026-09-13T19:07:18.578370+00:00",
+    "sha256": "6fe97439ed93a667d0cce6b520b54753f2e1e3d7b05e0fa29cb9b581894aa7da",
+    "bytes": 383994
+  },
+  {
+    "file": "inputs/raw/usgs_701.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=1991-04-15T20%3A39%3A17.810000&endtime=1991-04-15T20%3A40%3A17.810000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:18.977233+00:00",
+    "sha256": "0c786efe211d2b8f09fd93464bdd8951462d64bac3546fdb519e4433dca964e7",
+    "bytes": 1007
+  },
+  {
+    "file": "inputs/raw/usgs_702.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=1992-11-25T12%3A54%3A58.250000&endtime=1992-11-25T12%3A55%3A58.250000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:19.055441+00:00",
+    "sha256": "43687d3c7ef43868cdf593c16a70142aa553343543413bd6cc97e474c431f274",
+    "bytes": 1008
+  },
+  {
+    "file": "inputs/raw/usgs_705.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=1997-04-04T02%3A35%3A14.800000&endtime=1997-04-04T02%3A36%3A14.800000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:19.129971+00:00",
+    "sha256": "040a7046ef7f5c8c455769090848da4582b05ed22ac9e341f2c411f94b63f4d3",
+    "bytes": 1009
+  },
+  {
+    "file": "inputs/raw/usgs_708.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=1998-04-12T21%3A33%3A17.420000&endtime=1998-04-12T21%3A34%3A17.420000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:19.492988+00:00",
+    "sha256": "e8aaa775f3d36f0d29bb92a7792c432adad2a6451e7d5a20772e90ae2aa5e88d",
+    "bytes": 1010
+  },
+  {
+    "file": "inputs/raw/usgs_711.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=1999-05-14T05%3A04%3A38.200000&endtime=1999-05-14T05%3A05%3A38.200000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:19.853265+00:00",
+    "sha256": "912cecd15ffa112f731fa2a663e44250e48fc7020b6bde5d63c55c8c669d573b",
+    "bytes": 1006
+  },
+  {
+    "file": "inputs/raw/usgs_712.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=1999-07-01T18%3A55%3A34&endtime=1999-07-01T18%3A56%3A34&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:19.922344+00:00",
+    "sha256": "3de88e089a07c0082e15382e0526d32fb6b0270619ee53687d41f76d4f45dfcf",
+    "bytes": 994
+  },
+  {
+    "file": "inputs/raw/usgs_715.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2002-05-08T14%3A59%3A23.580000&endtime=2002-05-08T15%3A00%3A23.580000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:19.999413+00:00",
+    "sha256": "2061fd7a2fe752d7518efb2bf8573bc11e51a161370eca5b57a292fe78e6e6c7",
+    "bytes": 1857
+  },
+  {
+    "file": "inputs/raw/usgs_716.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2002-07-18T14%3A26%3A21.630000&endtime=2002-07-18T14%3A27%3A21.630000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:20.094262+00:00",
+    "sha256": "6d68dc736237caf8e3ddb3ebc206b437170fffb353c9f30f6f7ca0c10f41f364",
+    "bytes": 1079
+  },
+  {
+    "file": "inputs/raw/usgs_718.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2003-03-21T10%3A47%3A17.600000&endtime=2003-03-21T10%3A48%3A17.600000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:20.169097+00:00",
+    "sha256": "8e501db03388d36534018d4d87011c7c442eeb845790e80740afd1fba852d02d",
+    "bytes": 1019
+  },
+  {
+    "file": "inputs/raw/usgs_719.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2003-05-26T08%3A44%3A51.770000&endtime=2003-05-26T08%3A45%3A51.770000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:20.245657+00:00",
+    "sha256": "cde19efa42674e4ac3fc20facdef746d5c8779fcbe64af6672ee5188708edeb6",
+    "bytes": 1803
+  },
+  {
+    "file": "inputs/raw/usgs_720.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2003-08-03T05%3A38%3A27.550000&endtime=2003-08-03T05%3A39%3A27.550000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:20.716556+00:00",
+    "sha256": "db9d3c8e5289fd82a668d23411a30570da658981dee6bed5a97f78c169e82d39",
+    "bytes": 1112
+  },
+  {
+    "file": "inputs/raw/usgs_723.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2004-03-23T06%3A19%3A30.030000&endtime=2004-03-23T06%3A20%3A30.030000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:21.191074+00:00",
+    "sha256": "7c20691d18703d923aa8efb34a2c28210dba431d7aff44f9629a932d5e4cbc60",
+    "bytes": 1094
+  },
+  {
+    "file": "inputs/raw/usgs_725.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2005-01-08T07%3A14%3A05.900000&endtime=2005-01-08T07%3A15%3A05.900000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:21.267897+00:00",
+    "sha256": "27fcdef4b53889db77d0925ed4f8a1f932e8cb553f5df4b65485e42bb37f2196",
+    "bytes": 1880
+  },
+  {
+    "file": "inputs/raw/usgs_726.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2005-03-16T12%3A26%3A36.940000&endtime=2005-03-16T12%3A27%3A36.940000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:21.338413+00:00",
+    "sha256": "99d585e71800f82ad22950c5d48e59048be788a9bffbc70e60d5dbe103a5aaa6",
+    "bytes": 1101
+  },
+  {
+    "file": "inputs/raw/usgs_727.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2005-03-24T06%3A08%3A08.490000&endtime=2005-03-24T06%3A09%3A08.490000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:21.719465+00:00",
+    "sha256": "27f4ef4e40e10f63922f552bf4242bc039fd4f1f30b41d2c894897f204e4bd6b",
+    "bytes": 1120
+  },
+  {
+    "file": "inputs/raw/usgs_729.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2005-05-19T15%3A16%3A10.890000&endtime=2005-05-19T15%3A17%3A10.890000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:22.131211+00:00",
+    "sha256": "6f47749501599c42969c04383b864133cd6b06d585b40ea6a8c501de65418eef",
+    "bytes": 1022
+  },
+  {
+    "file": "inputs/raw/usgs_731.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2006-04-30T03%3A50%3A58.080000&endtime=2006-04-30T03%3A51%3A58.080000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:22.537800+00:00",
+    "sha256": "a8d1ebe4827f778a9183515a0576c10920297ffa32046abff576d0c8d1c67728",
+    "bytes": 1124
+  },
+  {
+    "file": "inputs/raw/usgs_732.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2006-05-29T05%3A20%3A09.200000&endtime=2006-05-29T05%3A21%3A09.200000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:22.926645+00:00",
+    "sha256": "78de1e913f69d3faaa1a4d1c5f86aa4fae21fb4fa33b0394f016d1f55305c183",
+    "bytes": 1123
+  },
+  {
+    "file": "inputs/raw/usgs_733.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2007-03-23T17%3A12%3A21.620000&endtime=2007-03-23T17%3A13%3A21.620000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:23.305665+00:00",
+    "sha256": "8e803e5728fd3bedcd5301811570d548e302a5738a6180a0c9fa282245858a8d",
+    "bytes": 1784
+  },
+  {
+    "file": "inputs/raw/usgs_734.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2008-02-17T19%3A31%3A39.100000&endtime=2008-02-17T19%3A32%3A39.100000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:23.689743+00:00",
+    "sha256": "ac6e43d1c10e8919bee9812c4b25e1ee93833e895a76a1dd22ae53d3c55daed0",
+    "bytes": 1783
+  },
+  {
+    "file": "inputs/raw/usgs_736.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2009-05-02T22%3A26%3A37.920000&endtime=2009-05-02T22%3A27%3A37.920000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:24.062174+00:00",
+    "sha256": "1957ea9fcd3be0abbfec4dbc109e9499950345aa41cb28ae2ec1ac25578acb31",
+    "bytes": 1022
+  },
+  {
+    "file": "inputs/raw/usgs_737.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2009-05-05T06%3A15%3A37.350000&endtime=2009-05-05T06%3A16%3A37.350000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:24.483593+00:00",
+    "sha256": "5714803987546d367e2a6972386d66efcf5ab202cb68e3ba9e8271bbb2472754",
+    "bytes": 1915
+  },
+  {
+    "file": "inputs/raw/usgs_739.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2009-12-02T23%3A13%3A30.830000&endtime=2009-12-02T23%3A14%3A30.830000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:24.853366+00:00",
+    "sha256": "7c73a6ec8ed3ca55aa5967589fa8161904f9a73177522ffbe830308cb47df295",
+    "bytes": 1022
+  },
+  {
+    "file": "inputs/raw/usgs_742.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2011-02-20T17%3A37%3A07.320000&endtime=2011-02-20T17%3A38%3A07.320000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:25.234486+00:00",
+    "sha256": "5e9f51207f8e0f2d239ea4ce0f9589476cba6fd532f22f62d02856860e7341bb",
+    "bytes": 1018
+  },
+  {
+    "file": "inputs/raw/usgs_745.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2013-06-09T00%3A21%3A04.640000&endtime=2013-06-09T00%3A22%3A04.640000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:25.312353+00:00",
+    "sha256": "6ee815c882c63529328ec9d484406ac0db95106e5844e24c301ab97291cc41f9",
+    "bytes": 1861
+  },
+  {
+    "file": "inputs/raw/usgs_747.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2014-04-24T12%3A45%3A39.660000&endtime=2014-04-24T12%3A46%3A39.660000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:25.686222+00:00",
+    "sha256": "f918888d0af0434e15e28f3c413f6181776b999af8da5567c59ca6c6aa827358",
+    "bytes": 1038
+  },
+  {
+    "file": "inputs/raw/usgs_749.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2015-03-19T03%3A48%3A53.560000&endtime=2015-03-19T03%3A49%3A53.560000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:25.757343+00:00",
+    "sha256": "5e41944e37e5c4878b0cfe9db63ac47a73fcaf743fc7872ac6d155c95b54a5c3",
+    "bytes": 1036
+  },
+  {
+    "file": "inputs/raw/usgs_750.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2015-05-24T21%3A06%3A11.140000&endtime=2015-05-24T21%3A07%3A11.140000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:26.264670+00:00",
+    "sha256": "b090891ec1dafd39173d0ceca93e50dd8570023486cfb8728e0e2574a7c168b9",
+    "bytes": 1098
+  },
+  {
+    "file": "inputs/raw/usgs_752.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2016-03-15T13%3A34%3A47.740000&endtime=2016-03-15T13%3A35%3A47.740000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:26.343791+00:00",
+    "sha256": "9f75f126ddb5047c4ec6f97abefb034853232e0616acaccbfc6ef784ce989fbc",
+    "bytes": 1804
+  },
+  {
+    "file": "inputs/raw/usgs_753.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2016-08-27T04%3A50%3A35.460000&endtime=2016-08-27T04%3A51%3A35.460000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:26.745607+00:00",
+    "sha256": "62efdc30a692112f3f274c48c98f99e801827f45082db4860066f8ef9397350c",
+    "bytes": 1041
+  },
+  {
+    "file": "inputs/raw/usgs_754.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2017-01-18T14%3A52%3A26.800000&endtime=2017-01-18T14%3A53%3A26.800000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:27.108208+00:00",
+    "sha256": "74a0ae9ecc2fa0f8d8cf9195c05db64590c35c457240651bc10c7c27e37273fe",
+    "bytes": 1013
+  },
+  {
+    "file": "inputs/raw/usgs_757.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2017-06-20T12%3A54%3A05.910000&endtime=2017-06-20T12%3A55%3A05.910000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:27.184197+00:00",
+    "sha256": "5d987a74e2c4846c6b6c0cb7ec39f81acaf8afc6993ecf6e5a4a0f00ca576906",
+    "bytes": 1037
+  },
+  {
+    "file": "inputs/raw/usgs_758.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2017-12-15T21%3A52%3A49.860000&endtime=2017-12-15T21%3A53%3A49.860000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:27.544800+00:00",
+    "sha256": "e455d4a70753b9d35c6616ebf173b5da065ea1b96a0d64c926df6bc94cc4a53d",
+    "bytes": 1014
+  },
+  {
+    "file": "inputs/raw/usgs_801.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=1995-08-08T04%3A37%3A25.830000&endtime=1995-08-08T04%3A38%3A25.830000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:27.991982+00:00",
+    "sha256": "8bb458785bb8320b4ad0a8e1047401ba6de3c5be3cca619b86e8dfd423a752e0",
+    "bytes": 1010
+  },
+  {
+    "file": "inputs/raw/usgs_802.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=1995-10-24T09%3A25%3A03.080000&endtime=1995-10-24T09%3A26%3A03.080000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:28.059896+00:00",
+    "sha256": "735463061d8f3303a08f59282ea06277433186f2d09af90f6538efe7a709431c",
+    "bytes": 1006
+  },
+  {
+    "file": "inputs/raw/usgs_811.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2005-04-01T22%3A42%3A52.770000&endtime=2005-04-01T22%3A43%3A52.770000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:28.133873+00:00",
+    "sha256": "162851ab7cbf57b6a338141c51cdaf736460c45c9fa798d74cf0a86e0939777c",
+    "bytes": 1022
+  },
+  {
+    "file": "inputs/raw/usgs_822.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2010-08-02T04%3A17%3A34.260000&endtime=2010-08-02T04%3A18%3A34.260000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:28.207229+00:00",
+    "sha256": "f4879ef04e9b5e7da4c340db76a3e29bd6f14bcc1f46e4f40f17e1a11f4cb251",
+    "bytes": 1022
+  },
+  {
+    "file": "inputs/raw/usgs_829.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2013-08-23T00%3A59%3A06.550000&endtime=2013-08-23T01%3A00%3A06.550000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:28.282199+00:00",
+    "sha256": "360c202ae86fd1631ee2379dd3819fcdafe8d3c247007dfa2e52b6850c339daf",
+    "bytes": 1016
+  },
+  {
+    "file": "inputs/raw/usgs_830.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2013-10-19T13%3A43%3A16.310000&endtime=2013-10-19T13%3A44%3A16.310000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:28.641077+00:00",
+    "sha256": "8ccc734a37afa483644dec43cdf2787fdc66f9473d4f03a085d38e24f30730f9",
+    "bytes": 2475
+  },
+  {
+    "file": "inputs/raw/usgs_843.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2018-09-04T14%3A37%3A18.920000&endtime=2018-09-04T14%3A38%3A18.920000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:28.988855+00:00",
+    "sha256": "0ebd7c72f083d88f3cf2173a57d468924f59d9304e75f60cb8d55424b04c3e6f",
+    "bytes": 1787
+  },
+  {
+    "file": "inputs/raw/usgs_845.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2020-02-14T09%3A54%3A58.590000&endtime=2020-02-14T09%3A55%3A58.590000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:29.060021+00:00",
+    "sha256": "d5ea19c116b6e6009e4174b417b61ecdd945b5edff254c5b0ae7d253de889e28",
+    "bytes": 1033
+  },
+  {
+    "file": "inputs/raw/usgs_848.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2020-07-11T18%3A57%3A36.500000&endtime=2020-07-11T18%3A58%3A36.500000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:29.137134+00:00",
+    "sha256": "0fd6445a96db95d23b39384331b5036d65466cc956cdde46d408008f54209d0c",
+    "bytes": 1037
+  },
+  {
+    "file": "inputs/raw/usgs_852.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2022-01-02T08%3A30%3A16.270000&endtime=2022-01-02T08%3A31%3A16.270000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:29.209894+00:00",
+    "sha256": "05ce5fff4237e48b445bf08bf866485c332e1b57d16ab106cc13d9787f41c5b0",
+    "bytes": 3239
+  },
+  {
+    "file": "inputs/raw/usgs_853.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2022-01-08T15%3A55%3A36.740000&endtime=2022-01-08T15%3A56%3A36.740000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:29.605016+00:00",
+    "sha256": "8a23e2ccc2b1229b0354714b0af9f1f7d9b03b1e86395334fb4c9c75bbcafd99",
+    "bytes": 1008
+  },
+  {
+    "file": "inputs/raw/usgs_854.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2022-03-07T23%3A25%3A10.210000&endtime=2022-03-07T23%3A26%3A10.210000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:29.680017+00:00",
+    "sha256": "87bac16f6bd5bdf0647f48c9f55508ac41b7ae57c6908d4adec2e34f7eaab38b",
+    "bytes": 1011
+  },
+  {
+    "file": "inputs/raw/usgs_857.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2022-05-30T06%3A39%3A50.730000&endtime=2022-05-30T06%3A40%3A50.730000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:29.750891+00:00",
+    "sha256": "fed5399d74341ff7cf76b0fb4539403a29d70bc4538e2245680028736913d031",
+    "bytes": 1012
+  },
+  {
+    "file": "inputs/raw/usgs_858.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2022-09-10T11%3A14%3A05.690000&endtime=2022-09-10T11%3A15%3A05.690000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:30.108629+00:00",
+    "sha256": "a33c01f63a295643629d8cc3e46d2e1bceb1806afc97f18488f4ff75e1655e78",
+    "bytes": 1083
+  },
+  {
+    "file": "inputs/raw/usgs_859.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2022-10-15T00%3A12%3A05.060000&endtime=2022-10-15T00%3A13%3A05.060000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:30.485050+00:00",
+    "sha256": "a88519ac05ad9ce678a323848afa74a19b69717b885219c472f10382f0c08fde",
+    "bytes": 1012
+  },
+  {
+    "file": "inputs/raw/usgs_860.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2022-12-10T12%3A01%3A17.580000&endtime=2022-12-10T12%3A02%3A17.580000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:30.894447+00:00",
+    "sha256": "c612ee47b31e3a9802273d95e1043663df73283e75f8fb87ce19ba52877c7379",
+    "bytes": 1793
+  },
+  {
+    "file": "inputs/raw/usgs_861.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2022-12-16T10%3A47%3A20.130000&endtime=2022-12-16T10%3A48%3A20.130000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:30.970044+00:00",
+    "sha256": "448b57ed6a7994bc2b5f69fe130dfaf5fa74c1fe2b4582d0c227d060869af6a1",
+    "bytes": 1788
+  },
+  {
+    "file": "inputs/raw/usgs_862.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2023-01-07T16%3A18%3A25.210000&endtime=2023-01-07T16%3A19%3A25.210000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:31.058433+00:00",
+    "sha256": "5eee50363a22f7c27d9c832c226b2f2df9e4a412c975487afa7063c46000c3d8",
+    "bytes": 1778
+  },
+  {
+    "file": "inputs/raw/usgs_904.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2023-09-29T22%3A35%3A39.680000&endtime=2023-09-29T22%3A36%3A39.680000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:31.179627+00:00",
+    "sha256": "a264682189ebe1e50a8644664a54b7a4e487ce7a8d695ebe9d4ce2cdc810b914",
+    "bytes": 1010
+  },
+  {
+    "file": "inputs/raw/usgs_905.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2023-10-14T22%3A09%3A35.330000&endtime=2023-10-14T22%3A10%3A35.330000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:31.550494+00:00",
+    "sha256": "1e6ccf441f20b9e0bd31d92d816d845f62415ab814177760ad28630c68578038",
+    "bytes": 1013
+  },
+  {
+    "file": "inputs/raw/usgs_906.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2023-10-22T03%3A02%3A51.790000&endtime=2023-10-22T03%3A03%3A51.790000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:31.624696+00:00",
+    "sha256": "e9c2155ba184aed89110cc5847aecca795d53dedb71718f0d60680ff33ff484a",
+    "bytes": 1011
+  },
+  {
+    "file": "inputs/raw/usgs_909.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2023-11-27T05%3A12%3A39.820000&endtime=2023-11-27T05%3A13%3A39.820000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:31.995214+00:00",
+    "sha256": "5f645ca038a96ed61481e18f8a4f91d8f40875ae45e9f4b06e89cd3b2d787180",
+    "bytes": 1010
+  },
+  {
+    "file": "inputs/raw/usgs_911.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2023-12-03T19%3A10%3A31.930000&endtime=2023-12-03T19%3A11%3A31.930000&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:32.372401+00:00",
+    "sha256": "0bf95c63fa15f0018d5c466dc24cb28c52ecc5040d406487cd4cb47758ea089b",
+    "bytes": 1797
+  },
+  {
+    "file": "inputs/raw/usgs_916.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2024-03-21T02%3A46%3A52&endtime=2024-03-21T02%3A47%3A52&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:32.444520+00:00",
+    "sha256": "1cf7dc80aa154edf1303cef424657ea664232e6440673722e6a9fdc1cbd6d9fc",
+    "bytes": 1756
+  },
+  {
+    "file": "inputs/raw/usgs_917.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2024-04-22T17%3A20%3A53&endtime=2024-04-22T17%3A21%3A53&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:32.835271+00:00",
+    "sha256": "82d82b2f0f4291332312d8be57af7a2f6d5131b9b8aa1d6b06fef67603001715",
+    "bytes": 999
+  },
+  {
+    "file": "inputs/raw/usgs_919.json",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2024-07-22T06%3A53%3A28&endtime=2024-07-22T06%3A54%3A28&orderby=time-asc",
+    "retrieved_utc": "2026-09-13T19:07:32.912912+00:00",
+    "sha256": "88d6f3baaa2d157eb0d8536ca30481a7e8d5dfe7546cf7ff9da0df0dbde2fea2",
+    "bytes": 999
+  }
+]

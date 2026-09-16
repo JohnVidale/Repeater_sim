@@ -1,15 +1,15 @@
 # Repeater P-wave noise comparison
 
-## Active multiphase phase selection (2026-09-13)
+## Active multiphase phase selection (2026-09-05)
 
-The multiphase workflow measures P, PKP, and PKiKP. Pdiff, PcP, and ScP
-are excluded from active measurements and fits. Pdiff was removed because
-this analysis prioritizes high-SNR arrivals and precise differential timing.
-The preferred relative-location fit uses P and PKP; P-only is diagnostic.
-PKiKP is measured and plotted but is not used in the preferred location fit.
-PKIKP remains a plot annotation only. Historical output folders and workbook
-rows retain their earlier phase selections. The active plot browser uses the
-regenerated run without Pdiff.
+The multiphase workflow excludes PcP and ScP from measurements, common-time
+estimation, and relative-location fits. The preferred fit uses P, Pdiff, and
+PKP, and the P-only fit is retained as a diagnostic. Pdiff is measured only
+from 100 degrees through distances below 110 degrees, filling the direct-P
+shadow-zone gap while remaining separately labeled in plots and tables. PKiKP
+is measured and plotted but is not used in a relative-location fit. PKIKP
+remains a plot annotation only. Existing output folders retain their historical
+phase selections and have not been regenerated.
 
 Each active multiphase correlation window is centered on an accepted automatic
 AIC pick for that phase and event. TauP ak135 supplies only the prediction

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "scope": "all valid pair-table connected components touching configured active pairs",
+  "fallback_hierarchy": ["ISC-EHB", "USGS-ComCat"],
+  "terminal_fallback": "unresolved; workbook coordinates are comparison and search seeds only",
+  "max_time_residual_s": 30,
+  "max_horizontal_residual_km": 100,
+  "ambiguity": "more than one candidate in first nonempty catalog blocks automatic selection",
+  "cluster_rule": "unweighted epicentral great-circle medoid with smallest event ID tie-break; median member depth",
+  "incomplete_cluster_rule": "no common reference until all members resolved",
+  "adoption": "review_only"
+}

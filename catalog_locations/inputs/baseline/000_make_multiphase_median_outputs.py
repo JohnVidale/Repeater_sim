@@ -25,11 +25,10 @@ from obspy.taup import TauPyModel
 import compare_repeater_pwaves as base
 
 
-PHASES = ("P", "PKiKP", "PKP")
-# Retain compatibility with historical workbook rows.
-WORKBOOK_PHASES = (*PHASES, "Pdiff")
+PHASES = ("P", "Pdiff", "PKiKP", "PKP")
 MARKED_PHASES = (
     "P",
+    "Pdiff",
     "pP",
     "sP",
     "PP",
@@ -43,7 +42,7 @@ MARKED_PHASES = (
     "sPKIKP",
     "pPKIKP",
 )
-PHASE_MARKERS = {"P": "o", "PKiKP": "D", "PKP": "P"}
+PHASE_MARKERS = {"P": "o", "Pdiff": "^", "PKiKP": "D", "PKP": "P"}
 PROGRESS_STATION_INTERVAL = 10
 AUTOMATIC_PICK_FILTER_HZ = (0.7, 4.0)
 AUTOMATIC_PICK_SEARCH_SECONDS = (-6.0, 8.0)
@@ -53,12 +52,16 @@ AUTOMATIC_PICK_SIGNAL_WINDOW_SECONDS = (0.0, 4.0)
 AUTOMATIC_PICK_MAX_OFFSET_SECONDS = 5.5
 ORIGIN_ALIGNMENT_MIN_SNR = 5.0
 PKIKP_MIN_DISTANCE_DEGREES = 110.0
+PDIFF_MIN_DISTANCE_DEGREES = 100.0
+PDIFF_MAX_DISTANCE_DEGREES = 110.0
 
 
 def phase_is_usable_for_shift(phase: str, distance_degrees: float) -> bool:
     """Return whether this phase/station geometry should enter shift summaries."""
     if phase not in PHASES:
         return False
+    if phase == "Pdiff":
+        return PDIFF_MIN_DISTANCE_DEGREES <= distance_degrees < PDIFF_MAX_DISTANCE_DEGREES
     if phase == "PKiKP":
         return distance_degrees >= PKIKP_MIN_DISTANCE_DEGREES
     return True
@@ -201,7 +204,7 @@ def read_manual_pick_alignment_shifts(
             ):
                 continue
             parts = current_station_phase.rsplit(maxsplit=1)
-            if len(parts) != 2 or parts[1] not in WORKBOOK_PHASES:
+            if len(parts) != 2 or parts[1] not in PHASES:
                 raise base.AnalysisError(
                     "Invalid station-phase label for manual shift row: "
                     f"{current_station_phase}"
@@ -277,7 +280,7 @@ def read_workbook_manual_exclusions(
             if station_phase is None or str(metric).strip().lower() != "status":
                 continue
             parts = str(station_phase).strip().rsplit(maxsplit=1)
-            if len(parts) != 2 or parts[1] not in WORKBOOK_PHASES:
+            if len(parts) != 2 or parts[1] not in PHASES:
                 raise base.AnalysisError(
                     f"Invalid station-phase label in status row: {station_phase!s}"
                 )
@@ -741,8 +744,6 @@ def display_shift(row: dict[str, Any]) -> float:
 
 def acceptance_label(row: dict[str, Any]) -> str:
     """Return the compact plot status requested for waveform rows."""
-    if bool(row.get("manual_excluded")):
-        return "X"
     return "Acc" if bool(row.get("good")) else "Rej"
 
 
@@ -1226,6 +1227,7 @@ def plot_shift_summary(
     figure, (axis1, axis2) = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
     colors = {
         "P": "tab:blue",
+        "Pdiff": "tab:orange",
         "PKiKP": "tab:red",
         "PKP": "tab:purple",
     }
@@ -2405,7 +2407,8 @@ def run(
                 "printed_residual_significant_digits": 3,
                 "phase_selection_rules": {
                     "Pdiff": (
-                        "excluded from measurement, plotting, and fitting"
+                        "100 <= epicentral_distance_degrees < 110; measured, "
+                        "plotted, and included in the preferred non-PKiKP fit"
                     ),
                     "PKiKP": "epicentral_distance_degrees >= 110; smaller distances ignored",
                     "PKIKP": "marked on plots only; not measured or fit",
