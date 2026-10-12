@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Plot repeater-pair age against the preferred fitted event separation.
 
-The plot combines the preferred relative-location fit (excluding PKiKP) with
+The plot combines the preferred P-only relative-location fit with
 the median direct-P correlation for each pair.  Pair groups are read from the
 ``pairs_purple`` and ``pairs_blue`` lists in the analysis JSON file.
 """
@@ -18,10 +18,10 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = ROOT / "analysis_config.json"
 DEFAULT_OUTPUTS = ROOT / "outputs"
-LOCATION_FILE = "median_relative_location_offsets_no_pkikp_with_bootstrap_uncertainty.csv"
+LOCATION_FILE = "median_relative_location_offsets_p_only_with_bootstrap_uncertainty.csv"
 PHASE_FILE = "phase_summary.csv"
 
 
@@ -62,6 +62,7 @@ def main() -> Path:
 
     purple = set(map(str, config.get("pairs_purple", [])))
     blue = set(map(str, config.get("pairs_blue", [])))
+    orange = set(map(str, config.get("pairs_orange", [])))
     requested = [str(pair) for pair in config["pairs"]]
 
     locations = {row["pair"]: row for row in read_csv(output_directory / LOCATION_FILE)}
@@ -88,7 +89,7 @@ def main() -> Path:
     plotted: list[str] = []
     missing: list[str] = []
     figure, axis = plt.subplots(figsize=(12.5, 7.5), constrained_layout=True)
-    colors = {"purple": "#6a3d9a", "blue": "#1f78b4", "other": "#555555"}
+    colors = {"orange": "#ffb000", "purple": "#6a3d9a", "blue": "#1f78b4", "other": "#555555"}
 
     for index, pair in enumerate(requested):
         row = locations.get(pair)
@@ -96,10 +97,14 @@ def main() -> Path:
         if row is None or dates is None or pair not in p_cc:
             missing.append(pair)
             continue
+        separation_text = row.get("horizontal_km") or row.get("separation_3d_km")
+        if separation_text in (None, ""):
+            missing.append(pair)
+            continue
         date1, date2 = dates
         years = abs((parse_date(str(date2)) - parse_date(str(date1))).days) / 365.25
-        separation = float(row.get("horizontal_km") or row["separation_3d_km"])
-        group = "purple" if pair in purple else "blue" if pair in blue else "other"
+        separation = float(separation_text)
+        group = "orange" if pair in orange else "purple" if pair in purple else "blue" if pair in blue else "other"
         color = colors[group]
         axis.scatter(years, separation, s=86, color=color, edgecolor="black", linewidth=0.6, zorder=3)
         # Hand-tuned offsets keep the dense low-separation cluster legible
@@ -131,6 +136,7 @@ def main() -> Path:
     axis.set_ylim(0, max(1.82, axis.get_ylim()[1]))
     axis.legend(
         handles=[
+            Line2D([], [], marker="o", linestyle="", markersize=11, markerfacecolor=colors["orange"], markeredgecolor="black", label="Orange group"),
             Line2D([], [], marker="o", linestyle="", markersize=11, markerfacecolor=colors["purple"], markeredgecolor="black", label="Purple group"),
             Line2D([], [], marker="o", linestyle="", markersize=11, markerfacecolor=colors["blue"], markeredgecolor="black", label="Blue group"),
         ],

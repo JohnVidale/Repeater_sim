@@ -25,7 +25,7 @@ from obspy.taup import TauPyModel
 import compare_repeater_pwaves as base
 
 
-PHASES = ("P", "PKiKP", "PKP")
+PHASES = ("P", "PcP", "PKiKP", "PKP", "ScP")
 # Retain compatibility with historical workbook rows.
 WORKBOOK_PHASES = (*PHASES, "Pdiff")
 MARKED_PHASES = (
@@ -34,6 +34,12 @@ MARKED_PHASES = (
     "sP",
     "PP",
     "PKP",
+    "PcP",
+    "pPcP",
+    "sPcP",
+    "ScP",
+    "pScP",
+    "sScP",
     "sPKP",
     "pPKP",
     "PKiKP",
@@ -43,7 +49,7 @@ MARKED_PHASES = (
     "sPKIKP",
     "pPKIKP",
 )
-PHASE_MARKERS = {"P": "o", "PKiKP": "D", "PKP": "P"}
+PHASE_MARKERS = {"P": "o", "PcP": "s", "PKiKP": "D", "PKP": "P", "ScP": "^"}
 PROGRESS_STATION_INTERVAL = 10
 AUTOMATIC_PICK_FILTER_HZ = (0.7, 4.0)
 AUTOMATIC_PICK_SEARCH_SECONDS = (-6.0, 8.0)
@@ -52,6 +58,8 @@ AUTOMATIC_PICK_NOISE_WINDOW_SECONDS = (-30.0, -10.0)
 AUTOMATIC_PICK_SIGNAL_WINDOW_SECONDS = (0.0, 4.0)
 ORIGIN_ALIGNMENT_MIN_SNR = 5.0
 PKIKP_MIN_DISTANCE_DEGREES = 110.0
+PKIKP_MAX_DISTANCE_DEGREES = 143.0
+PCP_MAX_DISTANCE_DEGREES = 65.0
 
 
 def phase_is_usable_for_shift(phase: str, distance_degrees: float) -> bool:
@@ -59,14 +67,37 @@ def phase_is_usable_for_shift(phase: str, distance_degrees: float) -> bool:
     if phase not in PHASES:
         return False
     if phase == "PKiKP":
-        return distance_degrees >= PKIKP_MIN_DISTANCE_DEGREES
+        return (
+            PKIKP_MIN_DISTANCE_DEGREES
+            <= distance_degrees
+            <= PKIKP_MAX_DISTANCE_DEGREES
+        )
+    if phase == "PcP":
+        return distance_degrees <= PCP_MAX_DISTANCE_DEGREES
     return True
 
 
-def phase_correlation_windows(config: dict[str, Any]) -> dict[str, list[float]]:
-    """Use the configured correlation window consistently for every phase."""
+def phase_correlation_windows(
+    config: dict[str, Any], pair_label: str | None = None
+) -> dict[str, list[float]]:
+    """Return correlation windows, with optional pair/phase-specific overrides."""
     window = [float(value) for value in config["correlation_window_seconds"]]
-    return {phase: list(window) for phase in PHASES}
+    windows = {phase: list(window) for phase in PHASES}
+    if pair_label is None:
+        return windows
+    overrides = dict(config.get("correlation_window_seconds_by_pair_phase", {}))
+    for phase, override in dict(overrides.get(pair_label, {})).items():
+        if phase not in PHASES:
+            raise base.AnalysisError(
+                f"{pair_label}: unknown phase in correlation-window override: {phase}"
+            )
+        candidate = [float(value) for value in override]
+        if len(candidate) != 2 or candidate[0] >= candidate[1]:
+            raise base.AnalysisError(
+                f"{pair_label} {phase}: correlation-window override must increase"
+            )
+        windows[phase] = candidate
+    return windows
 
 
 def phase_plot_windows(config: dict[str, Any]) -> dict[str, list[float]]:
@@ -86,6 +117,47 @@ def phase_shift_summary_y_limits(config: dict[str, Any]) -> tuple[float, float]:
             "phase_shift_summary_ylim_seconds must contain increasing limits"
         )
     return limits
+
+
+def residual_lag_search_seconds_for_status(
+    config: dict[str, Any], manual_status: str
+) -> float:
+    """Return the residual-lag half-window, with an optional B-only override."""
+    default_limit = float(config["residual_lag_search_seconds"])
+    if str(manual_status).strip().upper() != "B":
+        return default_limit
+    return float(config.get("b_status_residual_lag_search_seconds", default_limit))
+
+
+def waveform_timestamp_correction_seconds(
+    config: dict[str, Any], station_id: str, event: base.Event
+) -> float:
+    """Return the configured timestamp correction for one station/event."""
+    correction = 0.0
+    normalized_station = str(station_id).strip().upper()
+    event_epoch = float(event.origin)
+    for rule in config.get("waveform_timestamp_corrections", []):
+        stations = {
+            str(value).strip().upper() for value in rule.get("stations", [])
+        }
+        if normalized_station not in stations:
+            continue
+        start_epoch = float(base.UTCDateTime(str(rule["start"])))
+        end_epoch = float(base.UTCDateTime(str(rule["end"])))
+        if start_epoch <= event_epoch < end_epoch:
+            correction += float(rule["seconds"])
+    return correction
+
+
+def apply_waveform_timestamp_correction(
+    trace: base.ProcessedTrace, seconds: float
+) -> base.ProcessedTrace:
+    """Shift a trace timestamp without changing its waveform samples."""
+    if seconds == 0.0:
+        return trace
+    trace.start_epoch += seconds
+    trace.qc_flags.append(f"timestamp_corrected_{seconds:+.6f}s")
+    return trace
 
 
 def excluded_station_codes_for_pair(
@@ -140,7 +212,55 @@ def read_workbook_pair_column(
 
 
 def read_workbook_time_shifts(workbook_path: Path) -> dict[str, float]:
-    return read_workbook_pair_column(workbook_path, "new time shift")
+    return read_aligned_pair_column(workbook_path, "same_location_event2_minus_event1_shift_s")
+
+
+def read_aligned_pair_column(workbook_path: Path, column_name: str) -> dict[str, float]:
+    """Read finite values keyed by label from the aligned_pairs sheet."""
+    workbook = openpyxl.load_workbook(workbook_path, read_only=True, data_only=True)
+    try:
+        sheet = workbook["aligned_pairs"]
+        rows = sheet.iter_rows(values_only=True)
+        headers = {str(value).strip().lower(): index for index, value in enumerate(next(rows)) if value is not None}
+        key = column_name.strip().lower()
+        if "label" not in headers or key not in headers:
+            raise base.AnalysisError(f"Workbook aligned_pairs sheet must contain 'label' and {column_name!r} columns")
+        values = {}
+        for row in rows:
+            label = row[headers["label"]] if headers["label"] < len(row) else None
+            value = row[headers[key]] if headers[key] < len(row) else None
+            if label is None or value is None or str(value).strip() == "": continue
+            parsed = finite_float(value)
+            if parsed is None: raise base.AnalysisError(f"Workbook aligned_pairs {column_name!r} value for {label!s} is not finite numeric data")
+            values[str(label).strip()] = parsed
+        return values
+    finally:
+        workbook.close()
+
+
+def station_phase_label_from_status_rows(
+    rows: list[tuple[Any, ...]],
+    row_index: int,
+    station_index: int,
+    metric_index: int,
+) -> str:
+    """Read legacy combined or current three-line station-phase metadata."""
+    station_value = str(rows[row_index][station_index] or "").strip()
+    parts = station_value.rsplit(maxsplit=1)
+    if len(parts) == 2 and parts[1] in WORKBOOK_PHASES:
+        return station_value
+    if row_index + 1 >= len(rows):
+        raise base.AnalysisError(
+            f"Invalid station-phase label in status row: {station_value!s}"
+        )
+    phase_row = rows[row_index + 1]
+    phase = str(phase_row[station_index] or "").strip()
+    metric = str(phase_row[metric_index] or "").strip()
+    if not station_value or phase not in WORKBOOK_PHASES or metric != "Differential time shift (s)":
+        raise base.AnalysisError(
+            f"Invalid station-phase label in status row: {station_value!s}"
+        )
+    return f"{station_value} {phase}"
 
 
 def read_manual_pick_alignment_shifts(
@@ -184,15 +304,30 @@ def read_manual_pick_alignment_shifts(
             and value is not None
             and str(value).strip()
         }
+        data_rows = list(rows)
         shifts: dict[tuple[str, str, str], float] = {}
         current_station_phase: str | None = None
-        for row in rows:
+        for row_index, row in enumerate(data_rows):
             station_phase_value = (
                 row[station_index] if station_index < len(row) else None
             )
-            if station_phase_value is not None and str(station_phase_value).strip():
-                current_station_phase = str(station_phase_value).strip()
             metric = row[metric_index] if metric_index < len(row) else None
+            if (
+                str(metric).strip().lower() == "status"
+                and station_phase_value is not None
+                and str(station_phase_value).strip()
+            ):
+                current_station_phase = station_phase_label_from_status_rows(
+                    data_rows, row_index, station_index, metric_index
+                )
+            elif (
+                str(metric).strip().lower() == "manual pick alignment shift (s)"
+                and station_phase_value is not None
+                and str(station_phase_value).strip()
+            ):
+                # Retain support for compact legacy sheets that label only the
+                # manual-shift row rather than a preceding Status row.
+                current_station_phase = str(station_phase_value).strip()
             if (
                 current_station_phase is None
                 or str(metric).strip().lower()
@@ -228,10 +363,10 @@ def read_manual_pick_alignment_shifts(
         workbook.close()
 
 
-def read_workbook_manual_exclusions(
+def read_workbook_manual_statuses(
     workbook_path: Path,
-) -> set[tuple[str, str, str]]:
-    """Read phase-specific X statuses from the station acceptance workbook."""
+) -> dict[tuple[str, str, str], str]:
+    """Read persistent phase-specific X and B statuses from the workbook."""
     if not workbook_path.is_file():
         raise base.AnalysisError(
             f"Station acceptance workbook does not exist: {workbook_path}"
@@ -269,13 +404,17 @@ def read_workbook_manual_exclusions(
             and value is not None
             and str(value).strip()
         }
-        exclusions: set[tuple[str, str, str]] = set()
-        for row in rows:
+        data_rows = list(rows)
+        statuses: dict[tuple[str, str, str], str] = {}
+        for row_index, row in enumerate(data_rows):
             station_phase = row[station_index] if station_index < len(row) else None
             metric = row[metric_index] if metric_index < len(row) else None
             if station_phase is None or str(metric).strip().lower() != "status":
                 continue
-            parts = str(station_phase).strip().rsplit(maxsplit=1)
+            station_phase = station_phase_label_from_status_rows(
+                data_rows, row_index, station_index, metric_index
+            )
+            parts = station_phase.rsplit(maxsplit=1)
             if len(parts) != 2 or parts[1] not in WORKBOOK_PHASES:
                 raise base.AnalysisError(
                     f"Invalid station-phase label in status row: {station_phase!s}"
@@ -283,9 +422,10 @@ def read_workbook_manual_exclusions(
             station_id, phase = parts
             for index, pair_label in pair_columns.items():
                 value = row[index] if index < len(row) else None
-                if value is not None and str(value).strip().upper() == "X":
-                    exclusions.add((pair_label, station_id, phase))
-        return exclusions
+                status = str(value).strip().upper() if value is not None else ""
+                if status in {"X", "B"}:
+                    statuses[(pair_label, station_id, phase)] = status
+        return statuses
     finally:
         workbook.close()
 
@@ -465,57 +605,6 @@ def correlation_arrival_offsets(
             "Individual AIC offsets are required for computed and picked modes"
         )
     return float(pick1_offset), float(pick2_offset)
-
-
-def read_workbook_new_pair_locations(
-    workbook_path: Path,
-) -> dict[str, tuple[float, float, float | None]]:
-    workbook = openpyxl.load_workbook(workbook_path, read_only=True, data_only=True)
-    try:
-        sheet = workbook["pairs"]
-        rows = sheet.iter_rows(values_only=True)
-        headers = {
-            str(value).strip().lower(): index
-            for index, value in enumerate(next(rows))
-            if value is not None and str(value).strip()
-        }
-        if not {"label", "new_lat", "new_lon"}.issubset(headers):
-            return {}
-        locations: dict[str, tuple[float, float, float | None]] = {}
-        for row in rows:
-            label = row[headers["label"]] if headers["label"] < len(row) else None
-            if label is None:
-                continue
-            latitude = finite_float(row[headers["new_lat"]])
-            longitude = finite_float(row[headers["new_lon"]])
-            if latitude is None or longitude is None:
-                continue
-            depth = finite_float(row[headers["new_depth"]]) if "new_depth" in headers else None
-            locations[str(label).strip()] = (latitude, longitude, depth)
-        return locations
-    finally:
-        workbook.close()
-
-
-def apply_pair_location_override(
-    pair: base.Pair, latitude: float, longitude: float, depth_km: float | None = None
-) -> base.Pair:
-    depth = pair.depth_km if depth_km is None else depth_km
-    event1 = base.Event(
-        pair.event1.event_id,
-        pair.event1.origin,
-        latitude,
-        longitude,
-        depth,
-    )
-    event2 = base.Event(
-        pair.event2.event_id,
-        pair.event2.origin,
-        latitude,
-        longitude,
-        depth,
-    )
-    return base.Pair(pair.label, event1, event2, latitude, longitude, depth)
 
 
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -738,12 +827,14 @@ def display_shift(row: dict[str, Any]) -> float:
 def acceptance_label(row: dict[str, Any]) -> str:
     """Return the compact plot status requested for waveform rows."""
     if bool(row.get("manual_excluded")):
-        return "X"
+        return str(row.get("manual_status") or "X")
     return "Acc" if bool(row.get("good")) else "Rej"
 
 
 def event1_trace_color(row: dict[str, Any]) -> str:
-    """Draw manually excluded event-1 traces in black for immediate recognition."""
+    """Distinguish manually excluded event-1 traces from accepted traces."""
+    if str(row.get("manual_status") or "").upper() == "B":
+        return "tab:purple"
     return "black" if bool(row.get("manual_excluded")) else "tab:blue"
 
 
@@ -799,9 +890,16 @@ def plot_phase_waveforms(
     correlation_window: list[float],
     *,
     accepted_only: bool = False,
+    b_only: bool = False,
 ) -> None:
+    if accepted_only and b_only:
+        raise ValueError("accepted_only and b_only are mutually exclusive")
     output_directory = output / (
-        "phase_plots_A_only" if accepted_only else "phase_plots"
+        "phase_plots_A_only"
+        if accepted_only
+        else "phase_plots_B_only"
+        if b_only
+        else "phase_plots"
     )
     output_directory.mkdir(parents=True, exist_ok=True)
     plotted = sorted(
@@ -811,8 +909,16 @@ def plot_phase_waveforms(
             if row["phase"] == phase
             and row.get("absolute_plot_available", True)
             and (
-                not accepted_only
-                or (bool(row.get("good")) and not bool(row.get("manual_excluded")))
+                (not accepted_only and not b_only)
+                or (
+                    accepted_only
+                    and bool(row.get("good"))
+                    and not bool(row.get("manual_excluded"))
+                )
+                or (
+                    b_only
+                    and str(row.get("manual_status") or "").strip().upper() == "B"
+                )
             )
         ],
         key=phase_plot_sort_key,
@@ -828,7 +934,7 @@ def plot_phase_waveforms(
         for index, row in enumerate(page_rows):
             baseline = (len(page_rows) - 1 - index) * 5.0
             accepted = bool(row["good"])
-            trace_alpha = 1.0 if accepted else 0.55
+            trace_alpha = 1.0 if accepted or b_only else 0.55
             # A rejected AIC pick can place the correlation window on a
             # near-zero portion of a trace. Scale rejected traces from their
             # displayed waveform, solely for readable QC.
@@ -945,16 +1051,20 @@ def plot_phase_waveforms(
         else:
             alignment_text = "absolute-time alignment unavailable; "
         exclusion_text = (
-            "; black event-1 traces are solution-excluded"
+            "; purple event-1 traces have B status and are solution-excluded"
+            if b_only
+            else "; black event-1 traces are solution-excluded"
             if any(row.get("manual_excluded") for row in page_rows)
             else ""
         )
+        event1_color_name = "purple" if b_only else "blue"
         axis.set_title(
-            f"{pair.label} {phase}: event {pair.event1.event_id} blue vs "
+            f"{pair.label} {phase}: event {pair.event1.event_id} {event1_color_name} vs "
             f"{pair.event2.event_id} red; rows {start + 1}–{start + len(page_rows)} of {len(plotted)}\n"
             f"{alignment_text}absolute-time traces; dashed lines are accepted AIC picks"
             f"{exclusion_text}"
             f"{'; accepted traces only' if accepted_only else ''}"
+            f"{'; B-status traces only' if b_only else ''}"
         )
         suffix = "" if len(plotted) <= MAX_TRACES_PER_PHASE_PLOT else f"_{page_number:02d}"
         figure.savefig(
@@ -986,11 +1096,16 @@ def plot_station_waveform_comparisons(
     phase_windows: dict[str, list[float]],
     *,
     accepted_only: bool = False,
+    b_only: bool = False,
 ) -> int:
     """Make one all-pair waveform comparison for every station and phase."""
+    if accepted_only and b_only:
+        raise ValueError("accepted_only and b_only are mutually exclusive")
     output_directory = output / (
         "station_waveform_plots_A_only"
         if accepted_only
+        else "station_waveform_plots_B_only"
+        if b_only
         else "station_waveform_plots"
     )
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -1002,6 +1117,8 @@ def plot_station_waveform_comparisons(
         if accepted_only and (
             not bool(row.get("good")) or bool(row.get("manual_excluded"))
         ):
+            continue
+        if b_only and str(row.get("manual_status") or "").strip().upper() != "B":
             continue
         key = str(row["station_id"]), str(row["phase"])
         grouped.setdefault(key, []).append(row)
@@ -1025,7 +1142,7 @@ def plot_station_waveform_comparisons(
             for index, row in enumerate(page_rows):
                 baseline = (len(page_rows) - 1 - index) * 5.0
                 accepted = bool(row["good"])
-                trace_alpha = 1.0 if accepted else 0.55
+                trace_alpha = 1.0 if accepted or b_only else 0.55
                 plot1, plot2 = plotted_waveforms(row)
                 plot_time = np.asarray(row["plot_time"], dtype=float)
                 axis.plot(
@@ -1093,16 +1210,20 @@ def plot_station_waveform_comparisons(
             axis.set_yticks([])
             axis.set_xlabel(f"Time relative to predicted {phase} (s)")
             exclusion_text = (
-                "; black event-1 traces are solution-excluded"
+                "; purple event-1 traces have B status and are solution-excluded"
+                if b_only
+                else "; black event-1 traces are solution-excluded"
                 if any(row.get("manual_excluded") for row in page_rows)
                 else ""
             )
+            event1_color_name = "purple" if b_only else "blue"
             axis.set_title(
                 f"{station_id} {phase}: event-pair waveform comparisons; "
                 f"rows {start + 1}–{start + len(page_rows)} of {len(plotted)}\n"
-                "event 1 blue and event 2 red; absolute-time traces; dashed lines "
+                f"event 1 {event1_color_name} and event 2 red; absolute-time traces; dashed lines "
                 f"are accepted AIC picks{exclusion_text}"
                 f"{'; accepted traces only' if accepted_only else ''}"
+                f"{'; B-status traces only' if b_only else ''}"
             )
             safe_station = station_id.replace(".", "_")
             suffix = (
@@ -1245,8 +1366,10 @@ def plot_shift_summary(
     figure, (axis1, axis2) = plt.subplots(2, 1, figsize=(10, 8), constrained_layout=True)
     colors = {
         "P": "tab:blue",
+        "PcP": "tab:orange",
         "PKiKP": "tab:red",
         "PKP": "tab:purple",
+        "ScP": "tab:green",
     }
     for phase in PHASES:
         phase_rows = [row for row in plotted if row["phase"] == phase]
@@ -1301,11 +1424,6 @@ def run(
     time_shift_source_override: str | None = None,
 ) -> Path:
     config = base.load_json(config_path)
-    centroid_mode = str(config.get("centroid_location_mode", "fixed_depth")).strip().lower()
-    if centroid_mode not in {"free_hypocenter", "fixed_depth", "catalog_fixed"}:
-        raise base.AnalysisError(
-            "centroid_location_mode must be 'free_hypocenter', 'fixed_depth', or 'catalog_fixed'"
-        )
     time_shift_source = str(
         time_shift_source_override or config.get("time_shift_source", "computed")
     )
@@ -1335,8 +1453,17 @@ def run(
         else None
     )
     threshold = float(config["selection_correlation_threshold"])
+    pair_thresholds = {
+        str(pair): float(value)
+        for pair, value in dict(config.get("selection_correlation_threshold_by_pair", {})).items()
+    }
+    if any(value < 0.0 or value > 1.0 for value in pair_thresholds.values()):
+        raise base.AnalysisError("Per-pair correlation thresholds must be between 0 and 1")
     write_a_only_plot_versions = bool(
         config.get("write_a_only_plot_versions", False)
+    )
+    write_b_only_plot_versions = bool(
+        config.get("write_b_only_plot_versions", False)
     )
     automatic_pick_min_snr = float(
         config.get("automatic_pick_min_snr", AUTOMATIC_PICK_MIN_SNR)
@@ -1392,17 +1519,6 @@ def run(
         float(config["coordinate_tolerance_degrees"]),
         float(config["coordinate_tolerance_depth_km"]),
     )
-    new_pair_locations = (
-        read_workbook_new_pair_locations(catalog_workbook)
-        if centroid_mode != "catalog_fixed"
-        else {}
-    )
-    pairs = {
-        label: apply_pair_location_override(pair, *new_pair_locations[label])
-        if label in new_pair_locations
-        else pair
-        for label, pair in pairs.items()
-    }
     waveform_root = Path(config["waveform_root"])
     workbook_time_shifts: dict[str, float] = {}
     if time_shift_source == "workbook":
@@ -1411,9 +1527,9 @@ def run(
         )
     workbook_common_time_shifts: dict[str, float] = {}
     manual_pick_alignment_shifts: dict[tuple[str, str, str], float] = {}
-    workbook_manual_exclusions: set[tuple[str, str, str]] = set()
+    workbook_manual_statuses: dict[tuple[str, str, str], str] = {}
     if manual_pick_alignment_workbook is not None:
-        workbook_manual_exclusions = read_workbook_manual_exclusions(
+        workbook_manual_statuses = read_workbook_manual_statuses(
             manual_pick_alignment_workbook
         )
         # Station/phase corrections describe the waveform itself, so they must
@@ -1424,9 +1540,9 @@ def run(
             manual_pick_alignment_workbook
         )
     if common_time_shift_source == "workbook":
-        workbook_common_time_shifts = read_workbook_pair_column(
+        workbook_common_time_shifts = read_aligned_pair_column(
             time_shift_workbook or Path(config["catalog_path"]),
-            "pick align shift",
+            "pick_align_shift_s",
         )
     preapply_time_shifts = time_shift_source == "workbook"
     lag_search_seconds = (
@@ -1435,7 +1551,6 @@ def run(
         else float(config["lag_search_seconds"])
     )
 
-    phase_windows = phase_correlation_windows(config)
     plot_windows = phase_plot_windows(config)
 
     measurement_rows: list[dict[str, Any]] = []
@@ -1455,6 +1570,8 @@ def run(
     for pair_number, pair_label in enumerate(pair_labels, start=1):
         pair_start = time.perf_counter()
         pair = pairs[pair_label]
+        phase_windows = phase_correlation_windows(config, pair_label)
+        pair_threshold = pair_thresholds.get(pair_label, threshold)
         workbook_pair_shift = workbook_time_shifts.get(pair_label)
         if time_shift_source == "workbook" and workbook_pair_shift is None:
             raise base.AnalysisError(
@@ -1502,6 +1619,14 @@ def run(
                 )
                 trace1 = base.preprocess_trace(path1, config)
                 trace2 = base.preprocess_trace(path2, config)
+                correction1 = waveform_timestamp_correction_seconds(
+                    config, station_id, pair.event1
+                )
+                correction2 = waveform_timestamp_correction_seconds(
+                    config, station_id, pair.event2
+                )
+                trace1 = apply_waveform_timestamp_correction(trace1, correction1)
+                trace2 = apply_waveform_timestamp_correction(trace2, correction2)
                 trace_cache[station_id] = (path1, path2, trace1, trace2)
             except Exception as exc:
                 exception_rows.append(
@@ -1525,11 +1650,17 @@ def run(
             )
             for phase in PHASES:
                 try:
-                    manual_excluded = configured_station_excluded or (
+                    status_key = (
                         pair_label,
                         station_id,
                         phase,
-                    ) in workbook_manual_exclusions
+                    )
+                    manual_status = (
+                        "X"
+                        if configured_station_excluded
+                        else workbook_manual_statuses.get(status_key, "")
+                    )
+                    manual_excluded = manual_status in {"X", "B"}
                     arrival1, distance1, travel1, takeoff = phase_arrival(
                         model, pair.event1, trace1.station_latitude, trace1.station_longitude, phase,
                         arrival_cache,
@@ -1623,6 +1754,7 @@ def run(
                                 "boundary": False,
                                 "phase_geometry_usable": True,
                                 "manual_excluded": manual_excluded,
+                                "manual_status": manual_status,
                                 "solution_eligible": False,
                                 "good": False,
                                 "rejection_reason": rejected_reason,
@@ -1693,13 +1825,16 @@ def run(
                         )
                         boundary = False
                     else:
+                        status_lag_search_seconds = residual_lag_search_seconds_for_status(
+                            config, manual_status
+                        )
                         lag, cc, boundary, _, _ = base.signed_lag_correlation(
                             trace1,
                             trace2,
                             correlation_arrival1,
                             correlation_arrival2,
                             phase_windows[phase],
-                            lag_search_seconds,
+                            status_lag_search_seconds,
                         )
                     plot_time, plot1, plot2, plot_scale1, plot_scale2, plot_window_clipped = extract_normalized_plot(
                         trace1,
@@ -1733,7 +1868,7 @@ def run(
                         automatic_pick_min_snr,
                     )
                     good = bool(
-                        cc >= threshold
+                        cc >= pair_threshold
                         and not boundary
                         and phase_geometry_usable
                         and minimum_snr_passed
@@ -1764,12 +1899,18 @@ def run(
                         "boundary": bool(boundary),
                         "phase_geometry_usable": phase_geometry_usable,
                         "manual_excluded": manual_excluded,
+                        "manual_status": manual_status,
                         "solution_eligible": not manual_excluded,
                         "good": good,
                         "rejection_reason": (
-                            "manual station exclusion; measured and plotted only"
-                            if manual_excluded
-                            else ""
+                            "manual X exclusion; measured and plotted only"
+                            if manual_status == "X"
+                            else (
+                                "manual B exclusion; well-defined shift judged "
+                                "unlikely to result from differential location"
+                                if manual_status == "B"
+                                else ""
+                            )
                         ),
                         "automatic_pick1_offset_s": pick1_offset,
                         "automatic_pick1_snr": pick1_snr,
@@ -1925,7 +2066,7 @@ def run(
                                 "cc": float(cc),
                                 "boundary": bool(boundary),
                                 "good": bool(
-                                    cc >= threshold
+                                    cc >= pair_threshold
                                     and not boundary
                                     and row["phase_geometry_usable"]
                                     and not row.get("manual_excluded", False)
@@ -2277,7 +2418,7 @@ def run(
                 pair,
                 phase,
                 pair_plot_rows,
-                threshold,
+                pair_threshold,
                 phase_windows[phase],
             )
             if write_a_only_plot_versions:
@@ -2286,9 +2427,19 @@ def run(
                     pair,
                     phase,
                     pair_plot_rows,
-                    threshold,
+                    pair_threshold,
                     phase_windows[phase],
                     accepted_only=True,
+                )
+            if write_b_only_plot_versions:
+                plot_phase_waveforms(
+                    output,
+                    pair,
+                    phase,
+                    pair_plot_rows,
+                    pair_threshold,
+                    phase_windows[phase],
+                    b_only=True,
                 )
             rows_for_phase = [row for row in pair_plot_rows if row["phase"] == phase]
             good_for_phase = [row for row in rows_for_phase if row["good"]]
@@ -2321,7 +2472,7 @@ def run(
             pair_label,
             [row for row in residual_geometry_rows if row["pair_label"] == pair_label],
             median_shift,
-            threshold,
+            pair_threshold,
         )
         elapsed = time.perf_counter() - pair_start
         print(
@@ -2357,6 +2508,19 @@ def run(
             "waveform comparison plots.",
             flush=True,
         )
+    if write_b_only_plot_versions:
+        b_only_station_plot_count = plot_station_waveform_comparisons(
+            output,
+            station_waveform_rows,
+            pair_labels,
+            phase_windows,
+            b_only=True,
+        )
+        print(
+            f"Created {b_only_station_plot_count} B-only station-phase "
+            "waveform comparison plots.",
+            flush=True,
+        )
 
     write_csv(output / "phase_measurements.csv", measurement_rows)
     write_csv(output / "phase_summary.csv", phase_summary_rows)
@@ -2381,13 +2545,18 @@ def run(
                     manual_pick_alignment_shifts
                 ),
                 "catalog_workbook": str(catalog_workbook),
-                "pair_location_source": (
-                    "catalog_ehb" if centroid_mode == "catalog_fixed"
-                    else "relocated_centroid_when_available"
-                ),
-                "centroid_location_mode": centroid_mode,
+                "pair_location_source": "catalog",
                 "preapplied_time_shifts": preapply_time_shifts,
                 "lag_search_seconds": lag_search_seconds,
+                "b_status_residual_lag_search_seconds": float(
+                    config.get(
+                        "b_status_residual_lag_search_seconds",
+                        config["residual_lag_search_seconds"],
+                    )
+                ),
+                "waveform_timestamp_corrections": config.get(
+                    "waveform_timestamp_corrections", []
+                ),
                 "phase_plot_normalization": (
                     "each trace demeaned by its own phase correlation/search "
                     "window mean, then divided by its own demeaned RMS amplitude "
@@ -2434,6 +2603,7 @@ def run(
                     "as rows and the same absolute-time display alignment as phase plots"
                 ),
                 "a_only_plot_versions": write_a_only_plot_versions,
+                "b_only_plot_versions": write_b_only_plot_versions,
                 "origin_alignment_min_snr": origin_alignment_min_snr,
                 "phase_shift_summary_ylim_seconds": summary_y_limits,
                 "printed_residual_significant_digits": 3,
@@ -2441,7 +2611,18 @@ def run(
                     "Pdiff": (
                         "excluded from measurement, plotting, and fitting"
                     ),
-                    "PKiKP": "epicentral_distance_degrees >= 110; smaller distances ignored",
+                    "PcP": (
+                        "measured and plotted through 65 degrees for diagnostic "
+                        "review; excluded from all relative-location fit phase sets"
+                    ),
+                    "ScP": (
+                        "measured and plotted for diagnostic review; excluded from "
+                        "all relative-location fit phase sets"
+                    ),
+                    "PKiKP": (
+                        "110 <= epicentral_distance_degrees <= 143; "
+                        "outside this range ignored"
+                    ),
                     "PKIKP": "marked on plots only; not measured or fit",
                 },
                 "automatic_plot_qc_picks": {
@@ -2471,9 +2652,11 @@ def run(
                     "excluded_stations_by_pair", {}
                 ),
                 "excluded_station_handling": (
-                    "measure correlation and residual and include in waveform and "
-                    "phase-shift plots, but set good=false so excluded stations do "
-                    "not enter pair medians, location fits, or bootstraps"
+                    "persistent X (redundant or unpickable) and B (well-defined "
+                    "shift judged unlikely to result from differential location) "
+                    "statuses are measured and included in waveform and phase-shift "
+                    "plots, but set good=false so they do not enter pair medians, "
+                    "location fits, or bootstraps"
                 ),
                 "summary_method": (
                     "zero-shift waveform comparison at predicted phase arrivals; "

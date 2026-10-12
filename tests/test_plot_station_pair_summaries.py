@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import plot_station_pair_summaries as station_plots
+from plotting import plot_station_pair_summaries as station_plots
 
 
 class StationPairSummaryTests(unittest.TestCase):
@@ -12,6 +12,16 @@ class StationPairSummaryTests(unittest.TestCase):
                 {"manual_excluded": "True", "good": "True"}
             ),
             "X",
+        )
+        self.assertEqual(
+            station_plots.measurement_status(
+                {
+                    "manual_excluded": "True",
+                    "manual_status": "B",
+                    "good": "True",
+                }
+            ),
+            "B",
         )
         self.assertEqual(
             station_plots.measurement_status(

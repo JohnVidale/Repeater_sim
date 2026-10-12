@@ -1,0 +1,27 @@
+{
+  "pair": "P38",
+  "include_relative_offset": true,
+  "modes": [
+    "yka_40s",
+    "ilar_40s",
+    "ilar_17s_normalized"
+  ],
+  "location_and_timing_source": {
+    "workbook": "ICevents_working.xlsx",
+    "aligned_pairs_sheet": "aligned_pairs",
+    "same_location_reference_columns": "same_location_event[1|2]_{reference_time,lat,lon}",
+    "relative_location_reference_columns": "relative_location_event[1|2]_{reference_time,lat,lon}",
+    "legacy_pair_and_common_shifts": "zero; incorporated in aligned_pairs reference times",
+    "relative_offset_latitude_column": "event2_minus_event1_delta_lat",
+    "relative_offset_longitude_column": "event2_minus_event1_delta_lon",
+    "relative_location_phase_set_column": "relative_location_phase_set",
+    "relative_location_count_column": "relative_location_n"
+  },
+  "processing": {
+    "frequency_band_hz": [1.0, 2.0],
+    "alignment_phase": "PKiKP",
+    "travel_time_model": "ak135",
+    "station_statics": "none",
+    "output_mode": "isolated_timestamped_directory"
+  }
+}

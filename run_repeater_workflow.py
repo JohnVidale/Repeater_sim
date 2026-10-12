@@ -5,17 +5,12 @@ Typical use from VSCode:
 
     conda run -n vidale_main python run_repeater_workflow.py
 
-The ``do_centroid_relocation`` setting in ``analysis_config.json`` controls
-whether the default run first refreshes pair centroids.  The default assumes
-the centroids are already current and remakes phase plots, relative offsets,
-uncertainties, and workbook offset columns:
+Catalog coordinates provide the common reference location.  The workflow
+remakes phase plots, event-2-minus-event-1 relative offsets, uncertainties,
+and workbook offset columns:
 
     conda run -n vidale_main python run_repeater_workflow.py
 
-To redo the configured direct-P centroid relocation and rewrite its new
-coordinates (for ``fixed_depth`` or ``free_hypocenter`` mode):
-
-    conda run -n vidale_main python run_repeater_workflow.py --do-centroid-relocation
 """
 
 from __future__ import annotations
@@ -43,6 +38,29 @@ except ImportError:  # pragma: no cover - Windows fallback
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = ROOT / "analysis_config.json"
+
+
+def promote_completed_run(output: Path) -> tuple[Path, Path | None]:
+    """Archive the prior latest run and atomically promote a completed output."""
+    latest = ROOT / "latest_run"
+    archive_root = ROOT / "archive"
+    archived: Path | None = None
+    if latest.exists():
+        archive_root.mkdir(exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        archived = archive_root / f"latest_run_{stamp}"
+        suffix = 1
+        while archived.exists():
+            archived = archive_root / f"latest_run_{stamp}_{suffix:02d}"
+            suffix += 1
+        latest.replace(archived)
+    try:
+        output.replace(latest)
+    except Exception:
+        if archived is not None and not latest.exists() and archived.exists():
+            archived.replace(latest)
+        raise
+    return latest, archived
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -145,17 +163,17 @@ def finite_float(value: Any) -> float | None:
 def missing_workbook_time_shifts(workbook_path: Path, pair_labels: list[str]) -> list[str]:
     workbook = openpyxl.load_workbook(workbook_path, read_only=True, data_only=True)
     try:
-        sheet = workbook["pairs"]
+        sheet = workbook["aligned_pairs"]
         rows = sheet.iter_rows(values_only=True)
         header = {
             str(value).strip().lower(): index
             for index, value in enumerate(next(rows))
             if value is not None and str(value).strip()
         }
-        if "label" not in header or "new time shift" not in header:
+        if "label" not in header or "same_location_event2_minus_event1_shift_s" not in header:
             return list(pair_labels)
         label_index = header["label"]
-        shift_index = header["new time shift"]
+        shift_index = header["same_location_event2_minus_event1_shift_s"]
         shifts: dict[str, float] = {}
         for row in rows:
             label = row[label_index] if label_index < len(row) else None
@@ -205,7 +223,6 @@ def write_workflow_summary(
     *,
     config_path: Path,
     workbook_path: Path,
-    relocation_output: Path | None,
     computed_shift_output: Path | None,
     missing_time_shifts_filled: list[str],
     bootstrap_iterations: int,
@@ -217,17 +234,16 @@ def write_workflow_summary(
         "created": datetime.now().isoformat(timespec="seconds"),
         "config_path": str(config_path.resolve()),
         "workbook_path": str(workbook_path),
-        "relocation_output": str(relocation_output) if relocation_output else "",
         "computed_shift_output": str(computed_shift_output)
         if computed_shift_output
         else "",
         "missing_time_shifts_filled": missing_time_shifts_filled,
         "multiphase_output": str(output.resolve()),
         "preferred_relative_locations": str(
-            output / "median_absolute_relative_locations_no_pkikp.csv"
+            output / "median_absolute_relative_locations_p_only.csv"
         ),
         "preferred_bootstrap_uncertainties": str(
-            output / "median_relative_location_offsets_no_pkikp_with_bootstrap_uncertainty.csv"
+            output / "median_relative_location_offsets_p_only_with_bootstrap_uncertainty.csv"
         ),
         "bootstrap_iterations": bootstrap_iterations,
         "elapsed_time_seconds": elapsed_time_seconds,
@@ -243,13 +259,11 @@ def write_workflow_summary(
             else ""
         ),
         "workflow": [
-            "optional fixed-depth direct-P centroid relocation",
-            "optional write pair new_lat/new_lon to workbook",
             "optional missing-pairs-only computed preflight for blank workbook new time shift values",
             "make pair-oriented phase plots, station-oriented all-pair waveform plots, and measurement tables",
-            "fit relative offsets with preferred P+PKP (no_pkikp) and diagnostic p_only phase sets",
-            "bootstrap preferred no_pkikp uncertainties",
-            "write compact centroid/delta columns to ICevents_full.xlsx",
+            "fit relative offsets with preferred P-only and diagnostic P+PKP and P+PKP+PKiKP phase sets",
+            "bootstrap preferred P-only uncertainties",
+            "write event-2-minus-event-1 differential columns to the working workbook",
             "run unit tests",
             "refresh the canonical station acceptance matrix while preserving manual shifts and save a run snapshot",
         ],
@@ -262,11 +276,6 @@ def write_workflow_summary(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-    parser.add_argument(
-        "--do-centroid-relocation",
-        action="store_true",
-        help="Override the JSON setting and redo the configured centroid relocation.",
-    )
     parser.add_argument(
         "--skip-missing-time-shift-preflight",
         action="store_true",
@@ -300,12 +309,6 @@ def main() -> None:
 
     config_path = args.config.resolve()
     config = load_json(config_path)
-    centroid_mode = str(config.get("centroid_location_mode", "fixed_depth")).strip().lower()
-    if centroid_mode not in {"free_hypocenter", "fixed_depth", "catalog_fixed"}:
-        raise SystemExit(
-            "centroid_location_mode must be 'free_hypocenter', 'fixed_depth', "
-            "or 'catalog_fixed'"
-        )
     bootstrap_iterations = (
         int(args.bootstrap_iterations)
         if args.bootstrap_iterations is not None
@@ -326,44 +329,12 @@ def main() -> None:
     print(f"Config: {config_path}")
     print(f"Workbook: {workbook_path}")
     print(f"Pairs ({len(pair_labels)}): {', '.join(pair_labels)}")
-    print(f"Centroid location mode: {centroid_mode}")
-    do_centroid_relocation = bool(config.get("do_centroid_relocation", False))
-    if args.do_centroid_relocation:
-        do_centroid_relocation = True
-    print(f"Do centroid relocation: {do_centroid_relocation}")
+    print("Reference locations: catalog")
     print(f"Bootstrap iterations: {bootstrap_iterations}")
 
     python = sys.executable
-    relocation_output: Path | None = None
     computed_shift_output: Path | None = None
     missing_shifts: list[str] = []
-    if do_centroid_relocation and centroid_mode != "catalog_fixed":
-        completed = run_command(
-            [
-                python,
-                "relocate_pair_fixed_depths.py",
-                "--config",
-                str(config_path),
-            ],
-            args.dry_run,
-        )
-        if not args.dry_run:
-            relocation_output = parse_last_existing_path(completed.stdout)
-            run_command(
-                [
-                    python,
-                    "write_pair_new_locations_to_workbook.py",
-                    str(workbook_path),
-                    str(relocation_output / "pair_fixed_depth_location_summary.csv"),
-                ],
-                args.dry_run,
-            )
-    elif do_centroid_relocation:
-        print(
-            "Centroid location mode is catalog_fixed: retaining the EHB pair "
-            "coordinates; no spatial relocation is run.",
-            flush=True,
-        )
 
     if (
         str(config.get("time_shift_source", "computed")) == "workbook"
@@ -462,7 +433,7 @@ def main() -> None:
                 "--config",
                 str(config_path),
                 "--phase-set",
-                "no_pkikp",
+                "p_only",
                 "--iterations",
                 str(bootstrap_iterations),
             ],
@@ -471,11 +442,11 @@ def main() -> None:
         run_command(
             [
                 python,
-                "write_pair_centroid_offsets_to_workbook.py",
+                "write_pair_relative_offsets_to_workbook.py",
                 "--workbook",
                 str(workbook_path),
                 "--relative-locations",
-                str(output / "median_absolute_relative_locations_no_pkikp.csv"),
+                str(output / "median_absolute_relative_locations_p_only.csv"),
             ],
             args.dry_run,
         )
@@ -500,11 +471,11 @@ def main() -> None:
     if not args.dry_run:
         elapsed_time_seconds = time.perf_counter() - start_wall
         cpu_time_seconds = time.process_time() + child_cpu_seconds() - start_cpu
+        output, archived_latest_run = promote_completed_run(output)
         write_workflow_summary(
             output,
             config_path=config_path,
             workbook_path=workbook_path,
-            relocation_output=relocation_output,
             computed_shift_output=computed_shift_output,
             missing_time_shifts_filled=missing_shifts,
             bootstrap_iterations=bootstrap_iterations,
@@ -514,6 +485,8 @@ def main() -> None:
         )
         print()
         print(f"Workflow complete: {output}")
+        if archived_latest_run is not None:
+            print(f"Previous latest run archived: {archived_latest_run}")
         print(
             f"Elapsed clock time: {format_duration(elapsed_time_seconds)} "
             f"({elapsed_time_seconds:.3f} s)"

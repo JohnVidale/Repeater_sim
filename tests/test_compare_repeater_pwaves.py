@@ -5,6 +5,7 @@ import unittest
 from contextlib import redirect_stdout
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 from obspy import Trace, UTCDateTime
@@ -307,6 +308,19 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(set(windows), set(multi.PHASES))
         self.assertTrue(all(window == [-5.0, 10.0] for window in windows.values()))
 
+    def test_pair_phase_correlation_window_override(self):
+        windows = multi.phase_correlation_windows(
+            {
+                "correlation_window_seconds": [0.0, 5.0],
+                "correlation_window_seconds_by_pair_phase": {
+                    "P109": {"P": [0.0, 10.0]}
+                },
+            },
+            "P109",
+        )
+        self.assertEqual(windows["P"], [0.0, 10.0])
+        self.assertEqual(windows["PKP"], [0.0, 5.0])
+
     def test_all_phases_use_configured_plot_window(self):
         windows = multi.phase_plot_windows(
             {"plot_window_seconds": [-10.0, 30.0]}
@@ -519,6 +533,53 @@ class NoiseAndAssessmentTests(unittest.TestCase):
 
 
 class OutputTests(unittest.TestCase):
+    def test_b_status_can_use_a_wider_residual_lag_search(self):
+        config = {
+            "residual_lag_search_seconds": 0.5,
+            "b_status_residual_lag_search_seconds": 2.0,
+        }
+        self.assertEqual(
+            multi.residual_lag_search_seconds_for_status(config, "B"), 2.0
+        )
+        self.assertEqual(
+            multi.residual_lag_search_seconds_for_status(config, "A"), 0.5
+        )
+        self.assertEqual(
+            multi.residual_lag_search_seconds_for_status(config, ""), 0.5
+        )
+
+    def test_waveform_timestamp_correction_uses_half_open_event_interval(self):
+        config = {
+            "waveform_timestamp_corrections": [
+                {
+                    "stations": ["GT.BOSA"],
+                    "start": "2003-01-01T00:00:00Z",
+                    "end": "2011-01-01T00:00:00Z",
+                    "seconds": 0.62,
+                }
+            ]
+        }
+        event = SimpleNamespace(origin=UTCDateTime("2004-06-01T00:00:00Z"))
+        before = SimpleNamespace(origin=UTCDateTime("2002-12-31T23:59:59Z"))
+        at_end = SimpleNamespace(origin=UTCDateTime("2011-01-01T00:00:00Z"))
+
+        self.assertEqual(
+            multi.waveform_timestamp_correction_seconds(config, "gt.bosa", event),
+            0.62,
+        )
+        self.assertEqual(
+            multi.waveform_timestamp_correction_seconds(config, "GT.BOSA", before),
+            0.0,
+        )
+        self.assertEqual(
+            multi.waveform_timestamp_correction_seconds(config, "GT.BOSA", at_end),
+            0.0,
+        )
+        self.assertEqual(
+            multi.waveform_timestamp_correction_seconds(config, "GT.DBIC", event),
+            0.0,
+        )
+
     def test_workbook_mode_centers_event2_on_workbook_shift(self):
         self.assertEqual(
             multi.correlation_arrival_offsets("workbook", None, None, 1.25),
@@ -623,21 +684,25 @@ class OutputTests(unittest.TestCase):
             with self.assertRaisesRegex(crp.AnalysisError, "finite numeric"):
                 multi.read_manual_pick_alignment_shifts(path)
 
-    def test_read_workbook_manual_exclusions(self):
+    def test_read_workbook_manual_statuses(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "station_status.xlsx"
             workbook = Workbook()
             sheet = workbook.active
             sheet.title = "Station status"
             sheet.append(["Station", "Metric", "P30", "P31"])
-            sheet.append(["IU.ANMO P", "Status", "X", "A"])
+            sheet.append(["IU.ANMO P", "Status", "X", "B"])
             sheet.append(["IU.COLA PKP", "Status", "R", "x"])
             workbook.save(path)
             workbook.close()
 
             self.assertEqual(
-                multi.read_workbook_manual_exclusions(path),
-                {("P30", "IU.ANMO", "P"), ("P31", "IU.COLA", "PKP")},
+                multi.read_workbook_manual_statuses(path),
+                {
+                    ("P30", "IU.ANMO", "P"): "X",
+                    ("P31", "IU.ANMO", "P"): "B",
+                    ("P31", "IU.COLA", "PKP"): "X",
+                },
             )
 
     def test_none_mode_disables_pair_consistent_refinement(self):
@@ -739,6 +804,11 @@ class OutputTests(unittest.TestCase):
         self.assertFalse(multi.phase_is_usable_for_shift("PKiKP", 109.999))
         self.assertTrue(multi.phase_is_usable_for_shift("PKiKP", 110.0))
         self.assertTrue(multi.phase_is_usable_for_shift("P", 30.0))
+        self.assertTrue(multi.phase_is_usable_for_shift("PcP", 30.0))
+        self.assertTrue(multi.phase_is_usable_for_shift("PcP", 65.0))
+        self.assertFalse(multi.phase_is_usable_for_shift("PcP", 65.001))
+        self.assertTrue(multi.phase_is_usable_for_shift("ScP", 30.0))
+        self.assertTrue({"pPcP", "sPcP", "pScP", "sScP"}.issubset(multi.MARKED_PHASES))
 
     def test_pdiff_is_excluded_from_active_phases_and_preferred_fit(self):
         self.assertFalse(multi.phase_is_usable_for_shift("Pdiff", 99.999))
@@ -763,9 +833,21 @@ class OutputTests(unittest.TestCase):
         self.assertEqual(
             multi.acceptance_label({"good": False, "manual_excluded": True}), "X"
         )
+        self.assertEqual(
+            multi.acceptance_label(
+                {"good": False, "manual_excluded": True, "manual_status": "B"}
+            ),
+            "B",
+        )
 
     def test_excluded_event1_trace_is_black(self):
         self.assertEqual(multi.event1_trace_color({"manual_excluded": True}), "black")
+        self.assertEqual(
+            multi.event1_trace_color(
+                {"manual_excluded": True, "manual_status": "B"}
+            ),
+            "tab:purple",
+        )
         self.assertEqual(
             multi.event1_trace_color({"manual_excluded": False}), "tab:blue"
         )

@@ -17,8 +17,10 @@ explained in [`WORKING_LAYOUT.md`](WORKING_LAYOUT.md).
 
 The active configuration uses a 0–5 s correlation window, CC >= 0.875, workbook
 time shifts, fixed common depth, and P, PKP, and PKiKP measurements. P is the
-primary location phase; P+PKP is the secondary sensitivity case. Pdiff, PcP,
-and ScP are excluded.
+primary location phase; P+PKP is the secondary sensitivity case. PcP through
+65° and ScP
+are measured and plotted for diagnostic review but excluded from the location
+fits; Pdiff is excluded.
 
 ## Run the active workflow
 

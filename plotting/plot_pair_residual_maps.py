@@ -11,7 +11,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from plot_station_map_highlights import DEFAULT_HIGHLIGHTS, great_circle_path
+try:
+    # Package import for tests and module use from the repository root.
+    from plotting.plot_station_map_highlights import DEFAULT_HIGHLIGHTS, great_circle_path
+except ModuleNotFoundError:
+    # Direct ``python plotting/plot_pair_residual_maps.py`` execution.
+    from plot_station_map_highlights import DEFAULT_HIGHLIGHTS, great_circle_path
 
 
 def read_summaries(path: Path) -> dict[str, dict[str, str]]:

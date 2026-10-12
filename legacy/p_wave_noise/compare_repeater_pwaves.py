@@ -46,6 +46,7 @@ MISSING_SAC = -12345.0
 STATION_MODE_SELECTED = "selected"
 STATION_MODE_ALL = "all"
 PLOTTED_PHASES = ("P", "pP", "sP", "PP")
+WAVEFORM_DIRECTORY_TIME_TOLERANCE_SECONDS = 15.0
 
 
 class AnalysisError(RuntimeError):
@@ -347,16 +348,45 @@ def validate_selection_figures(
 
 
 def event_directory(root: Path, event: Event) -> Path:
+    """Resolve an event waveform folder without silently crossing events.
+
+    Legacy SAC folders are named to whole seconds while current catalog origins
+    can differ by a few seconds after relocation.  Prefer an exact directory;
+    otherwise accept only one nearest timestamped folder within 15 seconds.
+    """
     key = event.origin.strftime("%Y%m%d_%H%M%S")
     direct = root / key
     if direct.is_dir():
         return direct
     matches = sorted(path for path in root.glob(f"{key}*") if path.is_dir())
-    if len(matches) != 1:
-        raise AnalysisError(
-            f"Event {event.event_id}: expected one waveform directory matching {key}, found {len(matches)}"
-        )
-    return matches[0]
+    if len(matches) == 1:
+        return matches[0]
+
+    nearest: list[tuple[float, Path]] = []
+    for path in root.iterdir():
+        if not path.is_dir() or len(path.name) != 15:
+            continue
+        try:
+            folder_time = UTCDateTime(
+                f"{path.name[:8]}T{path.name[9:11]}:{path.name[11:13]}:{path.name[13:15]}"
+            )
+        except (TypeError, ValueError):
+            continue
+        difference = abs(float(folder_time - event.origin))
+        if difference <= WAVEFORM_DIRECTORY_TIME_TOLERANCE_SECONDS:
+            nearest.append((difference, path))
+    nearest.sort(key=lambda item: (item[0], item[1].name))
+    if len(nearest) == 1 or (
+        nearest
+        and len(nearest) > 1
+        and nearest[0][0] < nearest[1][0]
+    ):
+        return nearest[0][1]
+    raise AnalysisError(
+        f"Event {event.event_id}: expected one waveform directory matching {key}, "
+        f"found {len(matches)} exact-prefix and {len(nearest)} unique-nearest candidates "
+        f"within {WAVEFORM_DIRECTORY_TIME_TOLERANCE_SECONDS:g}s"
+    )
 
 
 def _header_float(sac: Any, name: str) -> float | None:

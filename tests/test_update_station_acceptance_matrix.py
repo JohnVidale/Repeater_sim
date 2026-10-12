@@ -36,7 +36,7 @@ class StationAcceptanceMatrixTests(unittest.TestCase):
             sheet.append(["II.BAD P", "Correlation", None, None])
             sheet.append(["II.BAD P", "Minimum SNR", None, None])
             sheet.append(["II.BAD P", matrix.MANUAL_METRIC, 0.0, None])
-            sheet.append(["II.MISSING P", "Status", "X", None])
+            sheet.append(["II.MISSING P", "Status", "X", "B"])
             sheet.append(["II.MISSING P", "Differential time shift (s)", None, None])
             sheet.append(["II.MISSING P", "Correlation", None, None])
             sheet.append(["II.MISSING P", "Minimum SNR", None, None])
@@ -92,6 +92,19 @@ class StationAcceptanceMatrixTests(unittest.TestCase):
                 )
                 writer.writerow(
                     {
+                        "pair_label": "P31",
+                        "station_id": "II.HOPE",
+                        "phase": "PcP",
+                        "manual_excluded": "False",
+                        "good": "True",
+                        "pair_residual_seconds": "-0.012",
+                        "cc": "0.91",
+                        "automatic_pick1_snr": "8",
+                        "automatic_pick2_snr": "7",
+                    }
+                )
+                writer.writerow(
+                    {
                         "pair_label": "P30",
                         "station_id": "II.BAD",
                         "phase": "P",
@@ -107,26 +120,43 @@ class StationAcceptanceMatrixTests(unittest.TestCase):
             counts = matrix.refresh_station_acceptance_matrix(
                 workbook_path, measurements_path, output_copy
             )
-            self.assertEqual(counts["measurement_rows_updated"], 2)
-            self.assertEqual(counts["manual_cells_preserved"], 6)
-            self.assertEqual(counts["exclusions_preserved"], 1)
+            self.assertEqual(counts["measurement_rows_updated"], 3)
+            self.assertEqual(counts["station_phase_blocks_added"], 1)
+            self.assertEqual(counts["conditional_format_ranges_extended"], 1)
+            self.assertEqual(counts["manual_cells_preserved"], 8)
+            self.assertEqual(counts["exclusions_preserved"], 2)
+            self.assertEqual(counts["manual_statuses_preserved"], 2)
             self.assertEqual(counts["nan_format_rule_added"], 1)
             refreshed = load_workbook(workbook_path, data_only=True)
             sheet = refreshed["Station status"]
-            self.assertEqual(sheet["C7"].value, "A")
-            self.assertIsNone(sheet["D7"].value)
-            self.assertAlmostEqual(sheet["C8"].value, 0.002)
-            self.assertAlmostEqual(sheet["C9"].value, 0.95)
-            self.assertAlmostEqual(sheet["C10"].value, 12.0)
-            self.assertEqual(sheet["C11"].value, 8.0)
-            self.assertEqual(sheet["D11"].value, 0.0)
-            self.assertEqual(sheet["C12"].value, "X")
-            self.assertEqual(sheet["C14"].value, "NaN")
-            self.assertEqual(sheet["C17"].value, "X")
+            def block_start(station, phase):
+                return next(
+                    row
+                    for row in range(7, sheet.max_row + 1)
+                    if sheet.cell(row, 1).value == station
+                    and sheet.cell(row + 1, 1).value == phase
+                )
+
+            hope = block_start("II.HOPE", "P")
+            bad = block_start("II.BAD", "P")
+            missing = block_start("II.MISSING", "P")
+            hope_pcp = block_start("II.HOPE", "PcP")
+            self.assertEqual(sheet.cell(hope, 3).value, "A")
+            self.assertIsNone(sheet.cell(hope, 4).value)
+            self.assertAlmostEqual(sheet.cell(hope + 1, 3).value, 0.002)
+            self.assertAlmostEqual(sheet.cell(hope + 2, 3).value, 0.95)
+            self.assertAlmostEqual(sheet.cell(hope + 3, 3).value, 12.0)
+            self.assertEqual(sheet.cell(hope + 4, 3).value, 8.0)
+            self.assertEqual(sheet.cell(hope + 4, 4).value, 0.0)
+            self.assertEqual(sheet.cell(bad, 3).value, "X")
+            self.assertEqual(sheet.cell(bad + 2, 3).value, "NaN")
+            self.assertEqual(sheet.cell(missing, 3).value, "X")
+            self.assertEqual(sheet.cell(missing, 4).value, "B")
             self.assertEqual(sheet["A3"].value, "Source run: run")
             self.assertIn("NaN means correlation was not computed", sheet["A4"].value)
             self.assertIn("correlation at least 0.85", sheet["A4"].value)
             self.assertIn("Accepted A status cells are blue", sheet["A4"].value)
+            self.assertIn("B status cells are purple", sheet["A4"].value)
             self.assertIn("non-zero manual pick-alignment shift cells are orange", sheet["A4"].value)
             correlation_rules = [
                 rule
@@ -135,6 +165,12 @@ class StationAcceptanceMatrixTests(unittest.TestCase):
                 if any('"Correlation"' in formula for formula in (rule.formula or []))
             ]
             self.assertEqual(len(correlation_rules), 3)
+            self.assertTrue(
+                any(
+                    "C7:D26" in str(conditional_range.sqref)
+                    for conditional_range in sheet.conditional_formatting
+                )
+            )
             self.assertTrue(
                 any('="NaN"' in formula for rule in correlation_rules for formula in rule.formula)
             )
@@ -161,14 +197,18 @@ class StationAcceptanceMatrixTests(unittest.TestCase):
             self.assertEqual(len(exclusion_rules), 1)
             self.assertTrue(exclusion_rules[0].stopIfTrue)
             self.assertEqual(exclusion_rules[0].priority, 1)
-            self.assertTrue(all(cell.fill.fill_type is None for cell in sheet[11]))
-            self.assertTrue(all(cell.fill.fill_type is None for cell in sheet[16]))
-            self.assertEqual(sheet["A7"].value, "II.HOPE P")
-            self.assertTrue(all(sheet.cell(row, 1).value is None for row in range(8, 12)))
-            self.assertEqual(sheet["A12"].value, "II.BAD P")
-            self.assertTrue(all(sheet.cell(row, 1).value is None for row in range(13, 17)))
-            self.assertEqual(sheet["A17"].value, "II.MISSING P")
-            self.assertTrue(all(sheet.cell(row, 1).value is None for row in range(18, 22)))
+            self.assertTrue(all(cell.fill.fill_type is None for cell in sheet[hope + 4]))
+            self.assertTrue(all(cell.fill.fill_type is None for cell in sheet[bad + 4]))
+            self.assertEqual(sheet.cell(hope, 1).value, "II.HOPE")
+            self.assertEqual(sheet.cell(hope + 1, 1).value, "P")
+            self.assertIsNone(sheet.cell(hope + 2, 1).value)
+            self.assertEqual(sheet.cell(hope_pcp, 1).value, "II.HOPE")
+            self.assertEqual(sheet.cell(hope_pcp + 1, 1).value, "PcP")
+            self.assertIsNone(sheet.cell(hope_pcp, 3).value)
+            self.assertEqual(sheet.cell(hope_pcp, 4).value, "A")
+            self.assertAlmostEqual(sheet.cell(hope_pcp + 1, 4).value, -0.012)
+            self.assertIsNone(sheet.cell(hope_pcp + 4, 3).value)
+            self.assertEqual(sheet.cell(hope_pcp + 4, 4).value, 0.0)
             passing_rules = [
                 formula
                 for conditional_range in sheet.conditional_formatting
@@ -215,7 +255,7 @@ class StationAcceptanceMatrixTests(unittest.TestCase):
             )
             refreshed.close()
             snapshot = load_workbook(output_copy, data_only=True)
-            self.assertEqual(snapshot["Station status"]["C11"].value, 8.0)
+            self.assertEqual(snapshot["Station status"].cell(hope + 4, 3).value, 8.0)
             snapshot.close()
 
 

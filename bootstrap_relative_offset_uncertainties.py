@@ -121,7 +121,6 @@ def run(
     allowed_phases = offsets.PHASE_SETS[phase_set]
     config = base.load_json(config_path)
     depth_mode = offsets.relative_location_depth_mode(config)
-    centroid_mode = offsets.centroid_location_mode(config)
     solve_depth = depth_mode == "free"
     model = TauPyModel(model=str(config["taup_model"]))
     pair_labels = [str(label) for label in config["pairs"]]
@@ -132,17 +131,6 @@ def run(
         float(config["coordinate_tolerance_degrees"]),
         float(config["coordinate_tolerance_depth_km"]),
     )
-    location_overrides = (
-        offsets.load_new_pair_locations(catalog_path)
-        if centroid_mode != "catalog_fixed"
-        else {}
-    )
-    pairs = {
-        label: offsets.apply_pair_location_override(pair, *location_overrides[label])
-        if label in location_overrides
-        else pair
-        for label, pair in pairs.items()
-    }
     rows = [
         row
         for row in read_csv(output / "phase_measurements.csv")
@@ -198,10 +186,7 @@ def run(
                     "event2": pair.event2.event_id,
                     "n": len(residuals),
                     "status": f"insufficient_{phase_set}_measurements",
-                    "location_reference": "relocated_centroid"
-                    if pair_label in location_overrides
-                    else "catalog_ehb",
-                    "centroid_location_mode": centroid_mode,
+                    "location_reference": "catalog",
                     "phase_set": phase_set,
                     "relative_location_depth_mode": depth_mode,
                     "bootstrap_iterations": iterations,
@@ -237,10 +222,7 @@ def run(
                 "median_abs_fit_residual_s": float(np.median(np.abs(fit_residuals))),
                 "residual_rms_s": float(np.sqrt(np.mean(fit_residuals * fit_residuals))),
                 "bootstrap_iterations": iterations,
-                "location_reference": "relocated_centroid"
-                if pair_label in location_overrides
-                else "catalog_ehb",
-                "centroid_location_mode": centroid_mode,
+                "location_reference": "catalog",
                 "phase_set": phase_set,
                 "relative_location_depth_mode": depth_mode,
             }

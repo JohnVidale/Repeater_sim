@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import openpyxl
+from aligned_pairs import aligned_rows, header_map, refresh_reference_times
 
 
 def normalized_header(row: tuple[Any, ...]) -> dict[str, int]:
@@ -62,24 +63,14 @@ def write_shifts(
 
     workbook = openpyxl.load_workbook(workbook_path)
     try:
-        sheet = workbook["pairs"]
-        header = normalized_header(
-            tuple(cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1)))
-        )
-        label_column = header["label"]
-        shift_column = header.get("new time shift")
-        if shift_column is None:
-            shift_column = sheet.max_column + 1
-            sheet.cell(row=1, column=shift_column).value = "new time shift"
+        sheet = workbook["aligned_pairs"]
+        header = header_map(sheet)
+        shift_column = header["same_location_event2_minus_event1_shift_s"]
         written = 0
         changed = 0
         skipped_existing = 0
         skipped_missing = 0
-        for row_index in range(2, sheet.max_row + 1):
-            label_value = sheet.cell(row=row_index, column=label_column).value
-            if label_value is None:
-                continue
-            label = str(label_value).strip()
+        for label, row_index in aligned_rows(sheet).items():
             if label not in shifts:
                 continue
             current = finite_float(sheet.cell(row=row_index, column=shift_column).value)
@@ -94,6 +85,7 @@ def write_shifts(
             cell = sheet.cell(row=row_index, column=shift_column)
             cell.value = value
             cell.number_format = "0.0000"
+            refresh_reference_times(workbook, row_index)
             written += 1
             if current is None or not math.isclose(current, value, abs_tol=5e-10):
                 changed += 1

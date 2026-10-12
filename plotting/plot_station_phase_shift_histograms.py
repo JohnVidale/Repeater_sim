@@ -12,11 +12,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-PHASES = ("P", "PKP", "PKiKP")
+PHASES = ("P", "PcP", "PKP", "PKiKP", "ScP")
 PHASE_COLORS = {
     "P": "tab:blue",
+    "PcP": "tab:orange",
     "PKP": "tab:purple",
     "PKiKP": "tab:red",
+    "ScP": "tab:green",
 }
 HIGHLIGHT_STATIONS = {"LPAZ", "VNDA", "CHTO", "KEV", "OTAV", "PMSA", "QSPA", "TRQA", "SJG"}
 

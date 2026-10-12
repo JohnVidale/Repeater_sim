@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-"""Write preferred pair centroid and repeater-offset columns to ICevents_full.xlsx."""
+"""Write preferred event-2-minus-event-1 offsets to the working workbook."""
 
 from __future__ import annotations
 
 import argparse
 import csv
 import shutil
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import openpyxl
+from aligned_pairs import aligned_rows, header_map, refresh_reference_times
 
 
-DEFAULT_WORKBOOK = Path("/Users/jvidale/Documents/GitHub/Array_codes/Files/ICevents_full.xlsx")
+DEFAULT_WORKBOOK = Path("ICevents_working.xlsx")
 DEFAULT_RELATIVE_LOCATIONS = Path(
     "outputs/multiphase_median_cc0.5_workbook_20260813_165113/"
     "median_absolute_relative_locations_no_pkikp.csv"
@@ -51,7 +53,6 @@ def read_relative_locations(path: Path) -> dict[str, dict[str, float | str | int
                 "event2_depth_km": float(row["event2_depth_km"]),
                 "delta_lat_degrees": float(row["delta_lat_degrees"]),
                 "delta_lon_degrees": float(row["delta_lon_degrees"]),
-                "depth_diff_km": float(row["depth_diff_km"]),
                 "event2_minus_event1_origin_time_shift_s": float(
                     row["event2_minus_event1_origin_time_shift_s"]
                 ),
@@ -80,94 +81,71 @@ def ensure_columns(sheet, names: list[str]) -> dict[str, int]:
     return header
 
 
+def ensure_column_after(sheet, name: str, after_name: str) -> dict[str, int]:
+    """Ensure a result column directly follows its catalog coordinate."""
+    header = normalized_header(
+        tuple(cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1)))
+    )
+    target_column = header[after_name.lower()] + 1
+    existing_column = header.get(name.lower())
+    if existing_column is not None:
+        if existing_column != target_column:
+            raise ValueError(
+                f"{name} must directly follow {after_name}; "
+                f"found it in column {existing_column}"
+            )
+        return header
+    sheet.insert_cols(target_column)
+    sheet.cell(row=1, column=target_column).value = name
+    return normalized_header(
+        tuple(cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1)))
+    )
+
+
 def write_offsets(workbook_path: Path, relative_locations_path: Path) -> Path:
     locations = read_relative_locations(relative_locations_path)
     backup_path = (
         workbook_path.parent
-        / f"{workbook_path.stem}_before_pair_centroid_offsets_"
+        / f"{workbook_path.stem}_before_pair_relative_offsets_"
         f"{datetime.now().strftime('%Y%m%d_%H%M%S')}{workbook_path.suffix}"
     )
     shutil.copy2(workbook_path, backup_path)
 
     workbook = openpyxl.load_workbook(workbook_path)
     try:
-        sheet = workbook["pairs"]
-        columns = [
-            "relative_location_phase_set",
-            "relative_location_n",
-            "centroid_lat",
-            "centroid_lon",
-            "centroid_depth_km",
-            "event2_minus_event1_delta_lat",
-            "event2_minus_event1_delta_lon",
-            "event2_minus_event1_delta_depth_km",
-            "event2_minus_event1_delta_time_s",
-            "event2_minus_event1_3d_km",
-            "relative_location_median_abs_residual_s",
-            "relative_location_rms_residual_s",
-        ]
-        header = ensure_columns(sheet, columns)
-        label_column = header["label"]
-        depth_column = header["depth"]
-        new_lat_column = header.get("new_lat")
-        new_lon_column = header.get("new_lon")
-        fallback_lat_column = header["lat"]
-        fallback_lon_column = header["lon"]
+        sheet = workbook["aligned_pairs"]
+        header = header_map(sheet)
         written = 0
-        for row_index in range(2, sheet.max_row + 1):
-            label_value = sheet.cell(row=row_index, column=label_column).value
-            if label_value is None:
-                continue
-            label = str(label_value).strip()
+        for label, row_index in aligned_rows(sheet).items():
             if label not in locations:
                 continue
             row = locations[label]
             delta_lat = float(row["delta_lat_degrees"])
             delta_lon = float(row["delta_lon_degrees"])
-            delta_depth = float(row["depth_diff_km"])
             delta_time = float(row["event2_minus_event1_origin_time_shift_s"])
-            centroid_lat_cell = (
-                sheet.cell(row=row_index, column=new_lat_column).value
-                if new_lat_column is not None
-                else None
-            )
-            centroid_lon_cell = (
-                sheet.cell(row=row_index, column=new_lon_column).value
-                if new_lon_column is not None
-                else None
-            )
-            centroid_lat = (
-                float(centroid_lat_cell)
-                if centroid_lat_cell is not None
-                else float(sheet.cell(row=row_index, column=fallback_lat_column).value)
-            )
-            centroid_lon = (
-                float(centroid_lon_cell)
-                if centroid_lon_cell is not None
-                else float(sheet.cell(row=row_index, column=fallback_lon_column).value)
-            )
-            centroid_depth = float(sheet.cell(row=row_index, column=depth_column).value)
             values = {
                 "relative_location_phase_set": row["phase_set"],
                 "relative_location_n": row["n"],
-                "centroid_lat": centroid_lat,
-                "centroid_lon": centroid_lon,
-                "centroid_depth_km": centroid_depth,
-                "event2_minus_event1_delta_lat": delta_lat,
-                "event2_minus_event1_delta_lon": delta_lon,
-                "event2_minus_event1_delta_depth_km": delta_depth,
-                "event2_minus_event1_delta_time_s": delta_time,
-                "event2_minus_event1_3d_km": row["separation_3d_km"],
+                "relative_location_north_m": 111195.0 * delta_lat,
+                "relative_location_east_m": 111195.0 * math.cos(math.radians((float(row["event1_lat"]) + float(row["event2_lat"])) / 2.0)) * delta_lon,
+                "relative_location_event2_minus_event1_shift_s": delta_time,
+                "relative_location_3d_m": 1000.0 * float(row["separation_3d_km"]),
                 "relative_location_median_abs_residual_s": row[
                     "median_abs_fit_residual_s"
                 ],
                 "relative_location_rms_residual_s": row["residual_rms_s"],
+                "relative_location_event1_lat": row["event1_lat"],
+                "relative_location_event1_lon": row["event1_lon"],
+                "relative_location_event2_lat": row["event2_lat"],
+                "relative_location_event2_lon": row["event2_lon"],
             }
             for name, value in values.items():
                 cell = sheet.cell(row=row_index, column=header[name.lower()])
                 cell.value = value
                 if isinstance(value, float):
                     cell.number_format = "0.0000"
+            sheet.cell(row_index, header["relative_location_available"]).value = True
+            refresh_reference_times(workbook, row_index)
             written += 1
         workbook.save(workbook_path)
     finally:

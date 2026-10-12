@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import openpyxl
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from obspy.taup import TauPyModel
@@ -20,17 +19,28 @@ import compare_repeater_pwaves as base
 EARTH_KM_PER_DEGREE = 111.195
 NO_PKIKP_PHASES = {"P", "PKP"}
 ALL_ACTIVE_PHASES = {"P", "PKP", "PKiKP"}
-PREFERRED_PHASE_SET = "no_pkikp"
+ALL_MEASURED_PHASES = {"P", "PcP", "ScP", "PKiKP", "PKP"}
+# The accepted production solution uses only direct P arrivals.  The PKP and
+# PKiKP cases are retained below as sensitivity diagnostics.
+PREFERRED_PHASE_SET = "p_only"
 PHASE_SETS = {
     "no_pkikp": NO_PKIKP_PHASES,
     "p_only": {"P"},
     "with_pkikp": ALL_ACTIVE_PHASES,
+    "all_measured": ALL_MEASURED_PHASES,
 }
-PHASE_COLORS = {"P": "tab:blue", "PKiKP": "tab:red", "PKP": "tab:purple"}
+PHASE_COLORS = {
+    "P": "tab:blue",
+    "PcP": "tab:orange",
+    "PKiKP": "tab:red",
+    "PKP": "tab:purple",
+    "ScP": "tab:green",
+}
 PHASE_SET_PLOT_LABELS = {
     "p_only": "P-only",
-    "no_pkikp": "P+PKP fallback",
-    "with_pkikp": "P+PKP+PKiKP fallback",
+    "no_pkikp": "P+PKP sensitivity",
+    "with_pkikp": "P+PKP+PKiKP sensitivity",
+    "all_measured": "P+PcP+ScP+PKiKP+PKP sensitivity",
 }
 
 
@@ -62,7 +72,7 @@ def plot_location_prediction_summaries(
             if row["pair_label"] == pair_label and row.get("east_km") not in (None, "")
         }
         phase_set = next(
-            (name for name in ("p_only", "no_pkikp", "with_pkikp") if name in candidates),
+            (name for name in ("all_measured", "p_only", "no_pkikp", "with_pkikp") if name in candidates),
             "",
         )
         solution = candidates.get(phase_set)
@@ -82,6 +92,16 @@ def plot_location_prediction_summaries(
             if row.get("pair_label") != pair_label:
                 continue
             is_excluded = truthy(row.get("manual_excluded"))
+            manual_status = (
+                str(row.get("manual_status") or "X").strip().upper()
+                if is_excluded
+                else ""
+            )
+            # X rows are intentionally retained in CSV diagnostics but omitted
+            # from observed-versus-predicted location summaries. B rows remain
+            # visible as anomalous, non-fitting timing observations.
+            if manual_status == "X":
+                continue
             if not (truthy(row.get("good")) or is_excluded):
                 continue
             observed = finite_float(row.get("pair_residual_seconds"))
@@ -103,6 +123,7 @@ def plot_location_prediction_summaries(
                     "observed": observed,
                     "predicted": float(gradient_array @ dimensions),
                     "excluded": is_excluded,
+                    "manual_status": manual_status,
                 }
             )
         if not plotted:
@@ -111,11 +132,13 @@ def plot_location_prediction_summaries(
             2, 1, figsize=(10, 8), constrained_layout=True
         )
         for row in plotted:
-            color = PHASE_COLORS.get(str(row["phase"]), "0.35")
-            line_width = 0.35 if row["excluded"] else 0.9
-            line_alpha = 0.45 if row["excluded"] else 0.7
-            observed_marker = "x" if row["excluded"] else "o"
-            observed_size = 48 if row["excluded"] else 28
+            anomalous = row.get("manual_status") == "B"
+            color = "#e377c2" if anomalous else PHASE_COLORS.get(str(row["phase"]), "0.35")
+            line_width = 0.45 if anomalous else 0.9
+            line_alpha = 0.65 if anomalous else 0.7
+            observed_marker = "o"
+            observed_size = 16 if anomalous else 28
+            predicted_size = 14 if anomalous else 24
             for axis, x_key in ((axis1, "azimuth"), (axis2, "distance")):
                 x_value = float(row[x_key])
                 axis.plot(
@@ -131,7 +154,7 @@ def plot_location_prediction_summaries(
                     s=observed_size, color=color, alpha=0.9, zorder=3,
                 )
                 axis.scatter(
-                    [x_value], [row["predicted"]], marker="D", s=24,
+                    [x_value], [row["predicted"]], marker="D", s=predicted_size,
                     facecolors="white", edgecolors=color, linewidths=0.9,
                     alpha=0.95, zorder=2,
                 )
@@ -143,8 +166,8 @@ def plot_location_prediction_summaries(
         meaning_handles = [
             Line2D([0], [0], marker="D", linestyle="none", markerfacecolor="white",
                    markeredgecolor="0.25", color="0.25", label="location prediction"),
-            Line2D([0], [0], marker="x", linestyle="-", linewidth=0.35,
-                   color="0.35", label="X: excluded; thin connector"),
+            Line2D([0], [0], marker="o", linestyle="-", linewidth=0.45,
+                   color="#e377c2", label="B: anomalous shift"),
         ]
         for axis in (axis1, axis2):
             axis.axhline(0.0, color="0.5", linewidth=0.8, linestyle="--")
@@ -176,17 +199,6 @@ def relative_location_depth_mode(config: dict[str, Any]) -> str:
     return mode
 
 
-def centroid_location_mode(config: dict[str, Any]) -> str:
-    """Return the common-centroid reference requested for this run."""
-    mode = str(config.get("centroid_location_mode", "fixed_depth")).strip().lower()
-    if mode not in {"free_hypocenter", "fixed_depth", "catalog_fixed"}:
-        raise ValueError(
-            "centroid_location_mode must be 'free_hypocenter', 'fixed_depth', "
-            "or 'catalog_fixed'"
-        )
-    return mode
-
-
 def read_csv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
@@ -212,66 +224,6 @@ def finite_float(value: Any) -> float | None:
     if not math.isfinite(parsed):
         return None
     return parsed
-
-
-def normalized_header(row: tuple[Any, ...]) -> dict[str, int]:
-    return {
-        str(value).strip().lower(): index
-        for index, value in enumerate(row)
-        if value is not None and str(value).strip()
-    }
-
-
-def load_new_pair_locations(workbook_path: Path) -> dict[str, tuple[float, float, float | None]]:
-    """Read optional pair-sheet relocated centroid coordinates."""
-    workbook = openpyxl.load_workbook(workbook_path, read_only=True, data_only=True)
-    try:
-        sheet = workbook["pairs"]
-        rows = sheet.iter_rows(values_only=True)
-        header = normalized_header(next(rows))
-        required = {"label", "new_lat", "new_lon"}
-        if not required.issubset(header):
-            return {}
-        overrides: dict[str, tuple[float, float, float | None]] = {}
-        for row in rows:
-            label_value = row[header["label"]]
-            if label_value is None:
-                continue
-            latitude = finite_float(row[header["new_lat"]])
-            longitude = finite_float(row[header["new_lon"]])
-            if latitude is None or longitude is None:
-                continue
-            depth = finite_float(row[header["new_depth"]]) if "new_depth" in header else None
-            overrides[str(label_value).strip()] = (latitude, longitude, depth)
-        return overrides
-    finally:
-        workbook.close()
-
-
-def apply_pair_location_override(
-    pair: base.Pair, latitude: float, longitude: float, depth_km: float | None = None
-) -> base.Pair:
-    depth = pair.depth_km if depth_km is None else depth_km
-    event1 = replace(
-        pair.event1,
-        latitude=latitude,
-        longitude=longitude,
-        depth_km=depth,
-    )
-    event2 = replace(
-        pair.event2,
-        latitude=latitude,
-        longitude=longitude,
-        depth_km=depth,
-    )
-    return replace(
-        pair,
-        event1=event1,
-        event2=event2,
-        latitude=latitude,
-        longitude=longitude,
-        depth_km=depth,
-    )
 
 
 def shifted_event(
@@ -383,7 +335,6 @@ def fit_median_absolute(gradients: np.ndarray, residuals: np.ndarray) -> np.ndar
 def fit_offsets(config_path: Path, output: Path, step_km: float) -> None:
     config = base.load_json(config_path)
     depth_mode = relative_location_depth_mode(config)
-    centroid_mode = centroid_location_mode(config)
     solve_depth = depth_mode == "free"
     model = TauPyModel(model=str(config["taup_model"]))
     pair_labels = [str(label) for label in config["pairs"]]
@@ -394,15 +345,6 @@ def fit_offsets(config_path: Path, output: Path, step_km: float) -> None:
         float(config["coordinate_tolerance_degrees"]),
         float(config["coordinate_tolerance_depth_km"]),
     )
-    location_overrides = {}
-    if catalog_workbook_path and centroid_mode != "catalog_fixed":
-        location_overrides = load_new_pair_locations(catalog_workbook_path)
-        pairs = {
-            label: apply_pair_location_override(pair, *location_overrides[label])
-            if label in location_overrides
-            else pair
-            for label, pair in pairs.items()
-        }
     measurement_rows = read_csv(output / "phase_measurements.csv")
     rows = [row for row in measurement_rows if truthy(row.get("good"))]
     median_shifts = {
@@ -449,10 +391,7 @@ def fit_offsets(config_path: Path, output: Path, step_km: float) -> None:
                 "common_lat": pair.latitude,
                 "common_lon": pair.longitude,
                 "common_depth_km": pair.depth_km,
-                "common_location_source": "relocated_centroid"
-                if pair_label in location_overrides
-                else "catalog_ehb",
-                "centroid_location_mode": centroid_mode,
+                "common_location_source": "catalog",
                 "relative_location_depth_mode": depth_mode,
                 "n": count,
             }

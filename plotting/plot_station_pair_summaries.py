@@ -17,13 +17,15 @@ PAIR_ORDER = (
     "P30", "P31", "P33", "P34", "P35", "P37", "P38", "P39",
     "P51", "P79", "P112", "P123", "P140", "P145", "P321", "P355",
 )
-PHASE_ORDER = ("P", "PKiKP", "PKP")
+PHASE_ORDER = ("P", "PcP", "PKiKP", "PKP", "ScP")
 PHASE_COLORS = {
     "P": "tab:blue",
+    "PcP": "tab:orange",
     "PKiKP": "tab:red",
     "PKP": "tab:purple",
+    "ScP": "tab:green",
 }
-STATUS_MARKERS = {"A": "o", "R": "x", "X": "s"}
+STATUS_MARKERS = {"A": "o", "R": "x", "X": "s", "B": "D"}
 
 
 def parse_bool(value: object) -> bool:
@@ -40,7 +42,8 @@ def parse_float(value: object) -> float | None:
 
 def measurement_status(row: dict[str, str]) -> str:
     if parse_bool(row.get("manual_excluded")):
-        return "X"
+        status = str(row.get("manual_status") or "X").strip().upper()
+        return status if status in {"X", "B"} else "X"
     return "A" if parse_bool(row.get("good")) else "R"
 
 
@@ -104,7 +107,10 @@ def plot_station(
         gridspec_kw={"height_ratios": (1.35, 1.0, 1.0)},
     )
     x_by_pair = {pair: index for index, pair in enumerate(PAIR_ORDER)}
-    phase_offsets = {phase: (index - 1.5) * 0.13 for index, phase in enumerate(PHASE_ORDER)}
+    phase_offsets = {
+        phase: (index - (len(PHASE_ORDER) - 1) / 2) * 0.13
+        for index, phase in enumerate(PHASE_ORDER)
+    }
 
     for row in rows:
         phase = str(row["phase"])
@@ -121,9 +127,9 @@ def plot_station(
                 value,
                 color=color,
                 marker=marker,
-                s=55 if status != "X" else 62,
+                s=55 if status not in {"X", "B"} else 62,
                 linewidth=1.3,
-                edgecolors="black" if marker == "s" else None,
+                edgecolors="black" if status in {"X", "B"} else None,
                 zorder=3,
             )
 
@@ -161,7 +167,7 @@ def plot_station(
     distance_text = f"; distance range {min(distances):.1f}–{max(distances):.1f}°" if distances else ""
     figure.suptitle(
         f"{station}: all measured event pairs{distance_text}\n"
-        "phase color; marker status: accepted circle, rejected x, excluded square",
+        "phase color; marker status: accepted circle, rejected x, X square, B diamond",
         fontsize=14,
     )
     phase_handles = [
@@ -171,15 +177,20 @@ def plot_station(
     status_handles = [
         Line2D(
             [], [], color="0.2", marker=marker, linestyle="None", label=label,
-            markerfacecolor="none" if marker == "s" else "0.2",
+            markerfacecolor="none" if status in {"X", "B"} else "0.2",
         )
-        for label, marker in (("Accepted", "o"), ("Rejected", "x"), ("Excluded", "s"))
+        for label, status, marker in (
+            ("Accepted", "A", "o"),
+            ("Rejected", "R", "x"),
+            ("X: redundant/unpickable", "X", "s"),
+            ("B: anomalous shift", "B", "D"),
+        )
     ]
     axes[0].legend(
         handles=phase_handles + status_handles,
         loc="upper center",
         bbox_to_anchor=(0.5, 1.27),
-        ncol=7,
+        ncol=4,
         fontsize=8,
     )
 
