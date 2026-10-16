@@ -15,9 +15,10 @@ The only scientific switch currently exposed is
   stored in `ICevents_working.xlsx:aligned_pairs`.
 
 Both cases read their event reference times and coordinates from the workbook
-`aligned_pairs` sheet.  That sheet applies the pair `pick align shift` once to
-both events, then applies either the no-location `new time shift` or the
-location-fit differential origin-time shift to event 2.  The staged legacy
+`aligned_pairs` sheet. That sheet applies the pair `pick align shift` once to
+both events. For the relative-location case it preserves the pair's
+same-location reference-time midpoint, splitting the fitted differential-time
+change equally and oppositely between events 1 and 2. The staged legacy
 code receives zero additional pair/common shifts, uses TauP ak135 PKiKP
 alignment, applies no station-static table, and cross-correlates only after
 stacking. Each run stages legacy code into a

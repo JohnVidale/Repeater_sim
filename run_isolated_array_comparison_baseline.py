@@ -192,6 +192,7 @@ run_compare_pair(
     wind_buff=30,
     fig_index={mode["figure_index"]},
     do_interpolate=True,
+    interpolate_rate=100,
     pair_name={pair!r},
     plot_peak={mode["plot_peak"]},
     win_norm={mode["window_normalize"]},

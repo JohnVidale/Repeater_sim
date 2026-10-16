@@ -49,6 +49,15 @@ def refresh_reference_times(workbook, row: int) -> None:
     if pick is not None and same is not None:
         sheet.cell(row, h["same_location_event1_reference_time"]).value = times[event1] + timedelta(seconds=float(pick))
         sheet.cell(row, h["same_location_event2_reference_time"]).value = times[event2] + timedelta(seconds=float(pick) + float(same))
-    if pick is not None and relative is not None:
-        sheet.cell(row, h["relative_location_event1_reference_time"]).value = times[event1] + timedelta(seconds=float(pick))
-        sheet.cell(row, h["relative_location_event2_reference_time"]).value = times[event2] + timedelta(seconds=float(pick) + float(relative))
+    if pick is not None and same is not None and relative is not None:
+        # The location fit constrains only the event-2-minus-event-1 time.
+        # Preserve the same-location pair midpoint, rather than assigning the
+        # full change to event 2, so the two location hypotheses differ by
+        # equal-and-opposite event reference shifts.
+        differential_change = float(relative) - float(same)
+        sheet.cell(row, h["relative_location_event1_reference_time"]).value = (
+            times[event1] + timedelta(seconds=float(pick) - 0.5 * differential_change)
+        )
+        sheet.cell(row, h["relative_location_event2_reference_time"]).value = (
+            times[event2] + timedelta(seconds=float(pick) + float(same) + 0.5 * differential_change)
+        )
